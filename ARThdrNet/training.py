@@ -31,7 +31,7 @@ class Config:
     CSV_FILE = "training_metrics.csv"
     
     # Training parameters from paper
-    BATCH_SIZE = 10
+    BATCH_SIZE = 4
     NUM_EPOCHS = 150
     LEARNING_RATE = 2e-4
     LR_DECAY_FACTOR = 0.5
