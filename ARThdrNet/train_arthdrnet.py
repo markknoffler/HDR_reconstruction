@@ -32,7 +32,7 @@ CHECKPOINT_DIR = "checkpoint"
 CSV_FILE = "training_metrics.csv"
 
 # Training hyperparameters
-BATCH_SIZE = 4  # Reduced from 10 for GPU memory
+BATCH_SIZE = 1  # Reduced from 10 for GPU memory
 NUM_EPOCHS = 150
 LEARNING_RATE = 2e-4
 LR_DECAY_FACTOR = 0.5
