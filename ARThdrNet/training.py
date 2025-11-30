@@ -23,8 +23,8 @@ from model import ArtHDRNet, ArtHDRLoss, init_weights
 # ==================== CONFIGURATION ====================
 class Config:
     # Paths - MODIFY THESE
-    LDR_DIR = "/path/to/your/ldr/images"
-    HDR_DIR = "/path/to/your/hdr/images"
+    LDR_DIR = "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/SingleHDR_training_data/HDR-Real/LDR_in"
+    HDR_DIR = "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/SingleHDR_training_data/HDR-Real/HDR_gt"
     CHECKPOINT_DIR = "checkpoint"
     CSV_FILE = "training_metrics.csv"
     
