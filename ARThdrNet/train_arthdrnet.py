@@ -27,7 +27,7 @@ import lpips  # For perceptual metrics
 # CONFIGURATION - MODIFY THESE PATHS
 # =============================================================================
 LDR_DIR = "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/SingleHDR_training_data/HDR-Real/LDR_in"  # Directory containing LDR images (.jpg)
-HDR_DIR = "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/SingleHDR_training_data/HDR-Real/LDR_in/HDR_gt"  # Directory containing HDR images (.hdr)
+HDR_DIR = "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/SingleHDR_training_data/HDR-Real/HDR_gt"  # Directory containing HDR images (.hdr)
 CHECKPOINT_DIR = "checkpoint"
 CSV_FILE = "training_metrics.csv"
 
