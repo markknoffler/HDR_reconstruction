@@ -1,10 +1,11 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchvision.models import resnet50, ResNet50_Weights
 
 class Encoder(nn.Module):
     def __init__(self, pretrained=True):
-        super(HistoHDRNet_Encoder, self).__init__()
+        super(Encoder, self).__init__()
         
         resnet_gt = resnet50(weights=ResNet50_Weights.IMAGENET1K_V1 if pretrained else None)
         resnet_his = resnet50(weights=ResNet50_Weights.IMAGENET1K_V1 if pretrained else None)
@@ -35,7 +36,7 @@ class Encoder(nn.Module):
         f_gt = self.encoder_gt(ldr_gt)
         f_his = self.encoder_his(ldr_his)
         fused_features = torch.cat([f_gt, f_his], dim=1)
-        return fused_features, f_gt, f_hi
+        return fused_features
 
 class SpatialSelfAttention(nn.Module):
     def __init__(self, in_channels=4096):
@@ -80,29 +81,80 @@ class SpatialSelfAttention(nn.Module):
         return out
 
 class ReconstructionUnit(nn.Module):
-    """
-    Reconstruction Unit (RU) - Reconstructs HDR image from features
-    Three 3x3 convolutional layers with ReLU (first two) and TanH (last)
-    """
-    def __init__(self, in_channels=64, out_channels=3):
+    def __init__(self, in_channels=4096, out_channels=3):
         super(ReconstructionUnit, self).__init__()
         
+        self.up1 = nn.Sequential(
+            nn.Conv2d(in_channels, 1024, kernel_size=3, padding=1),
+            nn.BatchNorm2d(1024),
+            nn.ReLU(inplace=True),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+        )
+        
+        self.up2 = nn.Sequential(
+            nn.Conv2d(1024, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+        )
+        
+        self.up3 = nn.Sequential(
+            nn.Conv2d(512, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+        )
+        
+        self.up4 = nn.Sequential(
+            nn.Conv2d(256, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+        )
+        
+        self.up5 = nn.Sequential(
+            nn.Conv2d(128, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+        )
+        
         self.reconstruction_net = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels, 3, padding=1),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(in_channels, in_channels, 3, padding=1),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(in_channels, out_channels, 3, padding=1),
-            nn.Tanh()  # Output in range [-1, 1] for HDR
+            nn.Conv2d(64, out_channels, kernel_size=3, padding=1),
+            nn.Tanh()
         )
     
     def forward(self, frs):
-        """Reconstruct HDR image from final feature map"""
-        return self.reconstruction_net(frs)
+        x = self.up1(frs)
+        x = self.up2(x)
+        x = self.up3(x)
+        x = self.up4(x)
+        x = self.up5(x)
+        x = self.reconstruction_net(x)
+        return x
 
 
 class HistoHDRNet(nn.Module):
-    def __init__(self, in_channels = 2, num_iterations=4):
+    def __init__(self, pretrained=True):
         super(HistoHDRNet, self).__init__()
-        self.num_iterations = num_iterations
+
+        self.encoder = Encoder(pretrained=pretrained)
+
+        self.self_attention = SpatialSelfAttention(in_channels = 4096)
+
+        self.reconstruction_unit = ReconstructionUnit(in_channels=4096, out_channels=3)
+        #need to add upsampling before reconstruction_net
+
+    def forward(self, ldr_gt, ldr_his):
+        fused_features = self.encoder(ldr_gt, ldr_his)
+        attention_weights = self.self_attention(fused_features)
+        final_features = fused_features + attention_weights
+
+        hdr_reconstructed = self.reconstruction_unit(final_features)
+
+        return hdr_reconstructed
 
