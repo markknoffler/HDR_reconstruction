@@ -8,7 +8,7 @@ from torchvision import transforms
 import numpy as np
 from tqdm import tqdm
 from PIL import Image
-import imageio
+import imageio.v3 as iio
 from skimage.metrics import structural_similarity as ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 import matplotlib.pyplot as plt
@@ -64,9 +64,9 @@ class HDRDataset(Dataset):
         img = cv2.resize(img, (self.image_size, self.image_size))
         img = img.astype(np.float32) / 255.0
         return img
-    
+   
     def load_hdr(self, path):
-        hdr = imageio.imread(path, format='HDR-FI')
+        hdr = iio.imread(path)
         hdr = cv2.resize(hdr, (self.image_size, self.image_size))
         hdr = np.clip(hdr, 0, 1e6)
         return hdr.astype(np.float32)
