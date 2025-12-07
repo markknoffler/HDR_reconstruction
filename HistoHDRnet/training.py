@@ -114,44 +114,25 @@ class HDRDataset(Dataset):
         return ldr_gt, ldr_his, hdr_gt, os.path.basename(ldr_path)
 
 def compute_hdrvdp2_metric(hdr_pred, hdr_gt):
-    global _matlab_eng
+    import pyfvvdp
+    import tempfile
+    import imageio
     
-    # Ensure MATLAB is running
-    eng = init_matlab_engine()
-    
-    # 1. Convert tensor shape AND network space → radiance
-    hdr_pred_np = hdr_pred.detach().cpu().numpy()  # (3,H,W)
-    hdr_gt_np = hdr_gt.detach().cpu().numpy()      # (3,H,W)
-    
-    hdr_pred_np = np.transpose(hdr_pred_np, (1, 2, 0))  # (H,W,C)
-    hdr_gt_np = np.transpose(hdr_gt_np, (1, 2, 0))      # (H,W,C)
-    
-    hdr_pred_np = np.clip((hdr_pred_np + 1.0) * 5.0, 0, 10)  # [0,10] cd/m²?
+    # Same preprocessing you already have
+    hdr_pred_np = np.transpose(hdr_pred.detach().cpu().numpy(), (1, 2, 0))
+    hdr_gt_np = np.transpose(hdr_gt.detach().cpu().numpy(), (1, 2, 0))
+    hdr_pred_np = np.clip((hdr_pred_np + 1.0) * 5.0, 0, 10)
     hdr_gt_np = np.clip((hdr_gt_np + 1.0) * 5.0, 0, 10)
     
-    # 2. Save as EXR (32-bit float per channel)
-    import tempfile
     with tempfile.TemporaryDirectory() as tmpdir:
         pred_path = f"{tmpdir}/pred.exr"
         gt_path = f"{tmpdir}/gt.exr"
-        
         imageio.imwrite(pred_path, hdr_pred_np, format='EXR-FI')
         imageio.imwrite(gt_path, hdr_gt_np, format='EXR-FI')
-        
-        # 3. HDR-VDP-2 call WITH PROPER PARAMETERS [web:2][web:8]
-        # display_luminance: peak white in cd/m² (1000 for HDR display)
-        # display_size: physical size in cm (e.g., 55cm diagonal → ~48cm width)
-        # viewing_distance: in cm (e.g., 80cm)
-        quality = eng.hdrvdp('quality', 
-                           pred_path, gt_path,           # test_image, ref_image
-                           1000,                         # display_luminance (cd/m²)
-                           48.0,                         # display_width_cm
-                           80.0,                         # viewing_distance_cm
-                           2.2,                          # display_gamma
-                           'sRGB',                       # primaries
-                           nargout=1)
+        jod = pyfvvdp.fvvdp(gt_path, pred_path, fov=32.0, temp=6504)
     
-    return float(quality)
+    return float(jod)
+
 
 def compute_tone_mapped_metrics(hdr_pred, hdr_gt, mu=5000.0):
     hdr_pred_np = hdr_pred.cpu().numpy()
@@ -295,7 +276,7 @@ def train():
         num_workers=4,
         pin_memory=True
     )
-    init_hdrvdp2()
+    #init_hdrvdp2()
     
     val_split = int(0.1 * len(train_dataset))
     train_size = len(train_dataset) - val_split
