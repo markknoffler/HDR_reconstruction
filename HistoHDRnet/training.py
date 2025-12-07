@@ -18,11 +18,25 @@ import glob
 from model import HistoHDRNet
 from losses import HistoHDRNetLoss
 
+import matlab.engine
+_matlab_eng = None
+
+def init_matlab_engine():
+    global _matlab_eng
+    if _matlab_eng is None:
+        _matlab_eng = matlab.engine.start_matlab()
+        _matlab_eng.addpath(r'./hdrvdp-2.2.1/', nargout=0)  # UPDATE YOUR PATH!
+        print("✓ HDR-VDP-2 MATLAB engine initialized")
+    return _matlab_eng
+
+def init_hdrvdp2():
+    """Initialize MATLAB engine once for HDR-VDP-2"""
+    init_matlab_engine()
+
+
 LDR_DIR = "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/SingleHDR_training_data/HDR-Real/LDR_in"  # Directory containing LDR images (.jpg)
 HDR_DIR = "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/SingleHDR_training_data/HDR-Real/HDR_gt"
 
-#LDR_DIR = "/path/to/your/ldr/directory"
-#HDR_DIR = "/path/to/your/hdr/directory"
 CHECKPOINT_DIR = "./checkpoints"
 GENERATED_DIR = "./generated_images"
 CSV_LOG_FILE = "./training_log.csv"
@@ -99,6 +113,45 @@ class HDRDataset(Dataset):
         
         return ldr_gt, ldr_his, hdr_gt, os.path.basename(ldr_path)
 
+def compute_hdrvdp2_metric(hdr_pred, hdr_gt):
+    global _matlab_eng
+    
+    # Ensure MATLAB is running
+    eng = init_matlab_engine()
+    
+    # 1. Convert tensor shape AND network space → radiance
+    hdr_pred_np = hdr_pred.detach().cpu().numpy()  # (3,H,W)
+    hdr_gt_np = hdr_gt.detach().cpu().numpy()      # (3,H,W)
+    
+    hdr_pred_np = np.transpose(hdr_pred_np, (1, 2, 0))  # (H,W,C)
+    hdr_gt_np = np.transpose(hdr_gt_np, (1, 2, 0))      # (H,W,C)
+    
+    hdr_pred_np = np.clip((hdr_pred_np + 1.0) * 5.0, 0, 10)  # [0,10] cd/m²?
+    hdr_gt_np = np.clip((hdr_gt_np + 1.0) * 5.0, 0, 10)
+    
+    # 2. Save as EXR (32-bit float per channel)
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdir:
+        pred_path = f"{tmpdir}/pred.exr"
+        gt_path = f"{tmpdir}/gt.exr"
+        
+        imageio.imwrite(pred_path, hdr_pred_np, format='EXR-FI')
+        imageio.imwrite(gt_path, hdr_gt_np, format='EXR-FI')
+        
+        # 3. HDR-VDP-2 call WITH PROPER PARAMETERS [web:2][web:8]
+        # display_luminance: peak white in cd/m² (1000 for HDR display)
+        # display_size: physical size in cm (e.g., 55cm diagonal → ~48cm width)
+        # viewing_distance: in cm (e.g., 80cm)
+        quality = eng.hdrvdp('quality', 
+                           pred_path, gt_path,           # test_image, ref_image
+                           1000,                         # display_luminance (cd/m²)
+                           48.0,                         # display_width_cm
+                           80.0,                         # viewing_distance_cm
+                           2.2,                          # display_gamma
+                           'sRGB',                       # primaries
+                           nargout=1)
+    
+    return float(quality)
 
 def compute_tone_mapped_metrics(hdr_pred, hdr_gt, mu=5000.0):
     hdr_pred_np = hdr_pred.cpu().numpy()
@@ -177,6 +230,8 @@ def validate(model, dataloader, criterion, device):
     total_psnr = 0
     total_ssim = 0
     num_batches = 0
+    total_hdrvdp2 = 0
+    num_images = 0
     
     with torch.no_grad():
         pbar = tqdm(dataloader, desc='Validation', leave=False)
@@ -192,23 +247,32 @@ def validate(model, dataloader, criterion, device):
             
             for i in range(hdr_pred.size(0)):
                 psnr_val, ssim_val = compute_tone_mapped_metrics(hdr_pred[i], hdr_gt[i])
+                hdrvdp2_val        = compute_hdrvdp2_metric(hdr_pred[i], hdr_gt[i])
                 total_psnr += psnr_val
                 total_ssim += ssim_val
+                total_hdrvdp2  += hdrvdp2_val
+                num_images     += 1
             
             num_batches += hdr_pred.size(0)
             
             pbar.set_postfix({
                 'loss': f'{loss.item():.4f}',
                 'psnr': f'{psnr_val:.2f}',
-                'ssim': f'{ssim_val:.4f}'
+                'ssim': f'{ssim_val:.4f}',
+                'hdrvdp2': f'{hdrvdp2_val:.4f}'
             })
+
     
     avg_loss = total_loss / len(dataloader)
-    avg_psnr = total_psnr / num_batches
-    avg_ssim = total_ssim / num_batches
+    #avg_psnr = total_psnr / num_batches
+    #avg_ssim = total_ssim / num_batches
+    #avg_hdrvdp2 = total_hdrvdp2 / num_images
+    avg_psnr = total_psnr / num_images      # ← use num_images consistently
+    avg_ssim = total_ssim / num_images
+    avg_hdrvdp2 = total_hdrvdp2 / num_images
     
     model.train()
-    return avg_loss, avg_psnr, avg_ssim
+    return avg_loss, avg_psnr, avg_ssim, avg_hdrvdp2
 
 
 def train():
@@ -231,6 +295,7 @@ def train():
         num_workers=4,
         pin_memory=True
     )
+    init_hdrvdp2()
     
     val_split = int(0.1 * len(train_dataset))
     train_size = len(train_dataset) - val_split
@@ -257,11 +322,13 @@ def train():
     csv_writer = csv.writer(csv_file)
     
     if not csv_exists:
-        csv_writer.writerow([
-            'epoch', 'train_loss', 'val_loss', 'val_psnr', 'val_ssim',
-            'l1_loss', 'vgg_loss', 'weber_loss', 'ms_ssim_loss', 'color_loss',
-            'learning_rate', 'timestamp'
-        ])
+    csv_writer.writerow([
+        'epoch', 'train_loss', 'val_loss',
+        'val_psnr', 'val_ssim', 'val_hdrvdp2',  # new
+        'l1_loss', 'vgg_loss', 'weber_loss', 'ms_ssim_loss', 'color_loss',
+        'learning_rate', 'timestamp'
+    ])
+
     
     best_psnr = 0.0
     best_epoch = 0
@@ -317,12 +384,13 @@ def train():
         print(f"  Weber: {epoch_components['weber']:.4f}, MS-SSIM: {epoch_components['ms_ssim']:.4f}")
         print(f"  Color: {epoch_components['color']:.4f}")
         
-        val_loss, val_psnr, val_ssim = validate(model, val_loader, criterion, DEVICE)
-        
-        print(f"  Validation - Loss: {val_loss:.4f}, PSNR: {val_psnr:.2f}, SSIM: {val_ssim:.4f}")
+        #val_loss, val_psnr, val_ssim = validate(model, val_loader, criterion, DEVICE)
+        val_loss, val_psnr, val_ssim, val_hdrvdp2 = validate(model, val_loader, criterion, DEVICE)
+        print(f" Validation - Loss: {val_loss:.4f}, PSNR: {val_psnr:.2f}, SSIM: {val_ssim:.4f}, HDR-VDP2: {val_hdrvdp2:.4f}") 
+        #print(f"  Validation - Loss: {val_loss:.4f}, PSNR: {val_psnr:.2f}, SSIM: {val_ssim:.4f}")
         
         csv_writer.writerow([
-            epoch, avg_train_loss, val_loss, val_psnr, val_ssim,
+            epoch, avg_train_loss, val_loss, val_psnr, val_ssim, val_hdrvdp2,
             epoch_components['l1'], epoch_components['vgg'],
             epoch_components['weber'], epoch_components['ms_ssim'],
             epoch_components['color'],
