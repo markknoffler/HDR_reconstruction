@@ -322,12 +322,12 @@ def train():
     csv_writer = csv.writer(csv_file)
     
     if not csv_exists:
-    csv_writer.writerow([
-        'epoch', 'train_loss', 'val_loss',
-        'val_psnr', 'val_ssim', 'val_hdrvdp2',  # new
-        'l1_loss', 'vgg_loss', 'weber_loss', 'ms_ssim_loss', 'color_loss',
-        'learning_rate', 'timestamp'
-    ])
+        csv_writer.writerow([
+            'epoch', 'train_loss', 'val_loss',
+            'val_psnr', 'val_ssim', 'val_hdrvdp2',  # new
+            'l1_loss', 'vgg_loss', 'weber_loss', 'ms_ssim_loss', 'color_loss',
+            'learning_rate', 'timestamp'
+        ])
 
     
     best_psnr = 0.0
