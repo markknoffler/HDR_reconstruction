@@ -143,7 +143,7 @@ class ColorLoss(nn.Module):
         pred_scaled = pred * self.max_val
         target_scaled = target * self.max_val
         squared_diff = (pred_scaled - target_scaled) ** 2
-        loss = torch.mean(squared_diff) / self.max_val
+        loss = torch.mean(squared_diff) / (self.max_val ** 2)
         return loss
 
 
