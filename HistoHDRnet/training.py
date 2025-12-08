@@ -113,7 +113,6 @@ class HDRDataset(Dataset):
         
         return ldr_gt, ldr_his, hdr_gt, os.path.basename(ldr_path)
 
-
 def compute_hdrvdp2_metric(hdr_pred, hdr_gt):
     import pyfvvdp
     import tempfile
@@ -128,13 +127,14 @@ def compute_hdrvdp2_metric(hdr_pred, hdr_gt):
         pred_path = f"{tmpdir}/pred.hdr"
         gt_path = f"{tmpdir}/gt.hdr"
         
-        # Use iio (already imported at top as imageio.v3)
         iio.imwrite(pred_path, hdr_pred_np.astype(np.float32))
         iio.imwrite(gt_path, hdr_gt_np.astype(np.float32))
         
-        jod = pyfvvdp.fvvdp(gt_path, pred_path, fov=32.0, temp=6504)
+        # CORRECT pyfvvdp API - no fov/temp arguments
+        metric = pyfvvdp.fvvdp(test=pred_path, reference=gt_path, display_name='standard_4k')
+        jod = float(metric)
     
-    return float(jod)
+    return jod
 
 
 
