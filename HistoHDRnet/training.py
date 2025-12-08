@@ -113,12 +113,13 @@ class HDRDataset(Dataset):
         
         return ldr_gt, ldr_his, hdr_gt, os.path.basename(ldr_path)
 
+
 def compute_hdrvdp2_metric(hdr_pred, hdr_gt):
     import pyfvvdp
     import tempfile
     import imageio
     
-    # Same preprocessing you already have
+    # Same preprocessing
     hdr_pred_np = np.transpose(hdr_pred.detach().cpu().numpy(), (1, 2, 0))
     hdr_gt_np = np.transpose(hdr_gt.detach().cpu().numpy(), (1, 2, 0))
     hdr_pred_np = np.clip((hdr_pred_np + 1.0) * 5.0, 0, 10)
@@ -127,11 +128,15 @@ def compute_hdrvdp2_metric(hdr_pred, hdr_gt):
     with tempfile.TemporaryDirectory() as tmpdir:
         pred_path = f"{tmpdir}/pred.exr"
         gt_path = f"{tmpdir}/gt.exr"
-        imageio.imwrite(pred_path, hdr_pred_np, format='EXR-FI')
-        imageio.imwrite(gt_path, hdr_gt_np, format='EXR-FI')
+        
+        # Use imageio v3 API (no format argument needed)
+        imageio.imwrite(pred_path, hdr_pred_np)
+        imageio.imwrite(gt_path, hdr_gt_np)
+        
         jod = pyfvvdp.fvvdp(gt_path, pred_path, fov=32.0, temp=6504)
     
     return float(jod)
+
 
 
 def compute_tone_mapped_metrics(hdr_pred, hdr_gt, mu=5000.0):
