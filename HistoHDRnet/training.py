@@ -257,12 +257,15 @@ def validate(model, dataloader, criterion, device):
                 real = (np.transpose(hdr_gt[batch_ind].cpu().numpy(), (1, 2, 0)) + 1) / 2.0
                 
                 # Calculate SSIM with multichannel=True
+
                 ssim_val = compare_ssim(
                     generated,
                     real,
-                    channel_axis=-1,   # last axis is channels (RGB)
-                    win_size=7         # optional but explicit; must be <= min(H, W)
+                    channel_axis=-1,  # last axis is channels (RGB)
+                    data_range=1.0,   # because generated/real are in [0, 1]
+                    win_size=7        # <= min(H, W); 7 is standard
                 )
+
 
                 
                 # --- HDR-VDP2 Proxy Metric ---
