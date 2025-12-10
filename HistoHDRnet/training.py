@@ -9,7 +9,7 @@ import numpy as np
 from tqdm import tqdm
 from PIL import Image
 import imageio.v3 as iio
-from skimage.metrics import structural_similarity as ssim
+from skimage.metrics import structural_similarity as compare_ssim
 from skimage.metrics import peak_signal_noise_ratio as psnr
 import matplotlib.pyplot as plt
 from datetime import datetime
