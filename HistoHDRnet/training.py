@@ -14,6 +14,11 @@ from skimage.metrics import peak_signal_noise_ratio as psnr
 import matplotlib.pyplot as plt
 from datetime import datetime
 import glob
+from skimage.measure import compare_ssim
+from util import make_required_directories, mu_tonemap, save_hdr_image, save_ldr_image
+
+mse_loss = nn.MSELoss()
+
 
 from model import HistoHDRNet
 from losses import HistoHDRNetLoss
@@ -139,30 +144,30 @@ def compute_hdrvdp2_metric(hdr_pred, hdr_gt):
     return float(np.clip(psnr_val / 10.0, 0.0, 10.0))
 
 
-def compute_tone_mapped_metrics(hdr_pred, hdr_gt, mu=5000.0):
-    hdr_pred_np = hdr_pred.cpu().numpy()
-    hdr_gt_np = hdr_gt.cpu().numpy()
-    
-    hdr_pred_np = (hdr_pred_np + 1.0) * 5.0
-    hdr_gt_np = (hdr_gt_np + 1.0) * 5.0
-    
-    hdr_pred_np = np.clip(hdr_pred_np, 0, 10)
-    hdr_gt_np = np.clip(hdr_gt_np, 0, 10)
-    
-    pred_tm = np.log(1 + mu * hdr_pred_np) / np.log(1 + mu)
-    gt_tm = np.log(1 + mu * hdr_gt_np) / np.log(1 + mu)
-    
-    pred_tm = (pred_tm * 255).astype(np.uint8)
-    gt_tm = (gt_tm * 255).astype(np.uint8)
-    
-    psnr_val = psnr(gt_tm, pred_tm, data_range=255)
-    
-    ssim_val = 0.0
-    for c in range(3):
-        ssim_val += ssim(gt_tm[c], pred_tm[c], data_range=255)
-    ssim_val /= 3
-    
-    return psnr_val, ssim_val
+#def compute_tone_mapped_metrics(hdr_pred, hdr_gt, mu=5000.0):
+#    hdr_pred_np = hdr_pred.cpu().numpy()
+#    hdr_gt_np = hdr_gt.cpu().numpy()
+#    
+#    hdr_pred_np = (hdr_pred_np + 1.0) * 5.0
+#    hdr_gt_np = (hdr_gt_np + 1.0) * 5.0
+#    
+#    hdr_pred_np = np.clip(hdr_pred_np, 0, 10)
+#    hdr_gt_np = np.clip(hdr_gt_np, 0, 10)
+#    
+#    pred_tm = np.log(1 + mu * hdr_pred_np) / np.log(1 + mu)
+#    gt_tm = np.log(1 + mu * hdr_gt_np) / np.log(1 + mu)
+#    
+#    pred_tm = (pred_tm * 255).astype(np.uint8)
+#    gt_tm = (gt_tm * 255).astype(np.uint8)
+#    
+#    psnr_val = psnr(gt_tm, pred_tm, data_range=255)
+#    
+#    ssim_val = 0.0
+#    for c in range(3):
+#        ssim_val += ssim(gt_tm[c], pred_tm[c], data_range=255)
+#    ssim_val /= 3
+#    
+#    return psnr_val, ssim_val
 
 
 def save_sample_images(model, dataloader, epoch, device):
@@ -211,14 +216,16 @@ def save_sample_images(model, dataloader, epoch, device):
 
 
 def validate(model, dataloader, criterion, device):
+    """
+    Validation function with FHDR-style PSNR and SSIM calculation
+    """
     model.eval()
     total_loss = 0
     total_psnr = 0
     total_ssim = 0
-    num_batches = 0
     total_hdrvdp2 = 0
     num_images = 0
-    
+
     with torch.no_grad():
         pbar = tqdm(dataloader, desc='Validation', leave=False)
         for ldr_gt, ldr_his, hdr_gt, _ in pbar:
@@ -226,40 +233,61 @@ def validate(model, dataloader, criterion, device):
             ldr_his = ldr_his.to(device)
             hdr_gt = hdr_gt.to(device)
             
+            # Model prediction
             hdr_pred = model(ldr_gt, ldr_his)
-            loss, loss_dict = criterion(hdr_pred, hdr_gt)
             
+            # Loss calculation
+            loss, loss_dict = criterion(hdr_pred, hdr_gt)
             total_loss += loss.item()
             
-            for i in range(hdr_pred.size(0)):
-                psnr_val, ssim_val = compute_tone_mapped_metrics(hdr_pred[i], hdr_gt[i])
-                hdrvdp2_val        = compute_hdrvdp2_metric(hdr_pred[i], hdr_gt[i])
+            # Calculate metrics for each image in the batch
+            for batch_ind in range(hdr_pred.size(0)):
+                # --- FHDR-style PSNR Calculation ---
+                # Apply mu-tonemap to individual images
+                pred_tonemapped = mu_tonemap(hdr_pred[batch_ind:batch_ind+1])
+                gt_tonemapped = mu_tonemap(hdr_gt[batch_ind:batch_ind+1])
+                
+                # Calculate MSE and PSNR
+                mse = mse_loss(pred_tonemapped, gt_tonemapped)
+                psnr_val = 10 * np.log10(1.0 / mse.item())
+                
+                # --- FHDR-style SSIM Calculation ---
+                # Convert to numpy and transpose to (H, W, C) format
+                # Normalize from [-1, 1] to [0, 1]
+                generated = (np.transpose(hdr_pred[batch_ind].cpu().numpy(), (1, 2, 0)) + 1) / 2.0
+                real = (np.transpose(hdr_gt[batch_ind].cpu().numpy(), (1, 2, 0)) + 1) / 2.0
+                
+                # Calculate SSIM with multichannel=True
+                ssim_val = compare_ssim(generated, real, multichannel=True)
+                
+                # --- HDR-VDP2 Proxy Metric ---
+                hdrvdp2_val = compute_hdrvdp2_metric(
+                    hdr_pred[batch_ind:batch_ind+1], 
+                    hdr_gt[batch_ind:batch_ind+1]
+                )
+                
+                # Accumulate metrics
                 total_psnr += psnr_val
                 total_ssim += ssim_val
-                total_hdrvdp2  += hdrvdp2_val
-                num_images     += 1
-            
-            num_batches += hdr_pred.size(0)
-            
-            pbar.set_postfix({
-                'loss': f'{loss.item():.4f}',
-                'psnr': f'{psnr_val:.2f}',
-                'ssim': f'{ssim_val:.4f}',
-                'hdrvdp2': f'{hdrvdp2_val:.4f}'
-            })
-
+                total_hdrvdp2 += hdrvdp2_val
+                num_images += 1
+                
+                # Update progress bar
+                pbar.set_postfix({
+                    'loss': f'{loss.item():.4f}',
+                    'psnr': f'{psnr_val:.2f}',
+                    'ssim': f'{ssim_val:.4f}',
+                    'hdrvdp2': f'{hdrvdp2_val:.4f}'
+                })
     
+    # Calculate averages
     avg_loss = total_loss / len(dataloader)
-    #avg_psnr = total_psnr / num_batches
-    #avg_ssim = total_ssim / num_batches
-    #avg_hdrvdp2 = total_hdrvdp2 / num_images
-    avg_psnr = total_psnr / num_images      # ← use num_images consistently
+    avg_psnr = total_psnr / num_images
     avg_ssim = total_ssim / num_images
     avg_hdrvdp2 = total_hdrvdp2 / num_images
     
     model.train()
     return avg_loss, avg_psnr, avg_ssim, avg_hdrvdp2
-
 
 def train():
     print("=" * 80)
