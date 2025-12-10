@@ -257,7 +257,13 @@ def validate(model, dataloader, criterion, device):
                 real = (np.transpose(hdr_gt[batch_ind].cpu().numpy(), (1, 2, 0)) + 1) / 2.0
                 
                 # Calculate SSIM with multichannel=True
-                ssim_val = compare_ssim(generated, real, multichannel=True)
+                ssim_val = compare_ssim(
+                    generated,
+                    real,
+                    channel_axis=-1,   # last axis is channels (RGB)
+                    win_size=7         # optional but explicit; must be <= min(H, W)
+                )
+
                 
                 # --- HDR-VDP2 Proxy Metric ---
                 hdrvdp2_val = compute_hdrvdp2_metric(
@@ -449,5 +455,15 @@ def train():
 
 
 if __name__ == "__main__":
+    print("Running a dry-run validation before training...")
+    try:
+        val_loss, val_psnr, val_ssim, val_hdrvdp2 = validate(
+            model, val_loader, criterion, DEVICE
+        )
+        print(f"[Dry run] Loss: {val_loss:.4f}, PSNR: {val_psnr:.2f}, "
+            f"SSIM: {val_ssim:.4f}, HDR-VDP2: {val_hdrvdp2:.4f}")
+    except Exception as e:
+        print("Dry-run validation failed with error:", e)
+        raise
     train()
 
