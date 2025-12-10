@@ -14,7 +14,6 @@ from skimage.metrics import peak_signal_noise_ratio as psnr
 import matplotlib.pyplot as plt
 from datetime import datetime
 import glob
-from skimage.measure import compare_ssim
 from util import make_required_directories, mu_tonemap, save_hdr_image, save_ldr_image
 
 mse_loss = nn.MSELoss()
