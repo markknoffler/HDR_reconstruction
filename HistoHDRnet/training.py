@@ -335,6 +335,17 @@ def train():
     criterion = HistoHDRNetLoss().to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, betas=(0.9, 0.999))
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS, eta_min=1e-6)
+
+    print("Running a dry-run validation before training...")
+    try:
+        val_loss, val_psnr, val_ssim, val_hdrvdp2 = validate(
+            model, val_loader, criterion, DEVICE
+        )
+        print(f"[Dry run] Loss: {val_loss:.4f}, PSNR: {val_psnr:.2f}, "
+            f"SSIM: {val_ssim:.4f}, HDR-VDP2: {val_hdrvdp2:.4f}")
+    except Exception as e:
+        print("Dry-run validation failed with error:", e)
+        raise
     
     csv_exists = os.path.exists(CSV_LOG_FILE)
     csv_file = open(CSV_LOG_FILE, 'a' if csv_exists else 'w', newline='')
@@ -455,15 +466,5 @@ def train():
 
 
 if __name__ == "__main__":
-    print("Running a dry-run validation before training...")
-    try:
-        val_loss, val_psnr, val_ssim, val_hdrvdp2 = validate(
-            model, val_loader, criterion, DEVICE
-        )
-        print(f"[Dry run] Loss: {val_loss:.4f}, PSNR: {val_psnr:.2f}, "
-            f"SSIM: {val_ssim:.4f}, HDR-VDP2: {val_hdrvdp2:.4f}")
-    except Exception as e:
-        print("Dry-run validation failed with error:", e)
-        raise
     train()
 
