@@ -261,8 +261,19 @@ def validate(model, dataloader, criterion, device):
                 # --- FHDR-style SSIM Calculation ---
                 # Convert to numpy and transpose to (H, W, C) format
                 # Normalize from [-1, 1] to [0, 1]
-                generated = (np.transpose(hdr_pred[batch_ind].cpu().numpy(), (1, 2, 0)) + 1) / 2.0
-                real = (np.transpose(hdr_gt[batch_ind].cpu().numpy(), (1, 2, 0)) + 1) / 2.0
+#                generated = (np.transpose(hdr_pred[batch_ind].cpu().numpy(), (1, 2, 0)) + 1) / 2.0
+#                real = (np.transpose(hdr_gt[batch_ind].cpu().numpy(), (1, 2, 0)) + 1) / 2.0 
+                # --- FIXED SSIM Calculation ---
+                pred_np = hdr_pred[batch_ind].cpu().numpy()
+                gt_np = hdr_gt[batch_ind].cpu().numpy()
+
+# CRITICAL: Clip GT to match model output range
+                gt_np = np.clip(gt_np, -1, 1)
+
+# Normalize both to [0, 1]
+                generated = (np.transpose(pred_np, (1, 2, 0)) + 1) / 2.0
+                real = (np.transpose(gt_np, (1, 2, 0)) + 1) / 2.0
+
                 
                 # Calculate SSIM with multichannel=True
 
