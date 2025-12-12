@@ -112,8 +112,9 @@ class HDRDataset(Dataset):
         ldr_his = torch.from_numpy(ldr_his).permute(2, 0, 1)
         hdr_gt = torch.from_numpy(hdr_gt).permute(2, 0, 1)
         
-        hdr_gt = torch.clamp(hdr_gt, 0, 10)
-        hdr_gt = (hdr_gt / 5.0) - 1.0
+        #hdr_gt = torch.clamp(hdr_gt, 0, 10)
+        #hdr_gt = (hdr_gt / 5.0) - 1.0
+        hdr_gt = (hdr_gt - 0.5) / 0.5
         
         return ldr_gt, ldr_his, hdr_gt, os.path.basename(ldr_path)
 
@@ -183,11 +184,18 @@ def save_sample_images(model, dataloader, epoch, device):
         hdr_pred_save = hdr_pred[0].cpu().permute(1, 2, 0).numpy()
         hdr_gt_save = hdr_gt[0].cpu().permute(1, 2, 0).numpy()
         
-        hdr_pred_save = (hdr_pred_save + 1.0) * 5.0
-        hdr_gt_save = (hdr_gt_save + 1.0) * 5.0
-        
-        hdr_pred_save = np.clip(hdr_pred_save, 0, 10)
-        hdr_gt_save = np.clip(hdr_gt_save, 0, 10)
+#        hdr_pred_save = (hdr_pred_save + 1.0) * 5.0
+#        hdr_gt_save = (hdr_gt_save + 1.0) * 5.0
+#        
+#        hdr_pred_save = np.clip(hdr_pred_save, 0, 10)
+#        hdr_gt_save = np.clip(hdr_gt_save, 0, 10)
+
+        # Denormalize: inverse of (x - 0.5) / 0.5 is x * 0.5 + 0.5
+        hdr_pred_save = hdr_pred_save * 0.5 + 0.5       # ✅ ADD
+        hdr_gt_save = hdr_gt_save * 0.5 + 0.5           # ✅ ADD
+        hdr_pred_save = np.clip(hdr_pred_save, 0, None) # ✅ ADD (clip negatives only)
+        hdr_gt_save = np.clip(hdr_gt_save, 0, None)     # ✅ ADD (clip negatives only)
+
         
         mu = 5000.0
         pred_tm = np.log(1 + mu * hdr_pred_save) / np.log(1 + mu)
