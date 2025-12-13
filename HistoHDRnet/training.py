@@ -288,8 +288,10 @@ def validate(model, dataloader, criterion, device):
                 ssim_val = compare_ssim(
                     generated,
                     real,
-                    channel_axis=-1  # ✅ Tells scikit-image channels are at last axis
+                    channel_axis=-1,
+                    data_range=1.0  # ✅ Required for floating point images
                 )
+
 
 
 
