@@ -86,7 +86,8 @@ class HDRDataset(Dataset):
     def load_hdr(self, path):
         hdr = iio.imread(path)
         hdr = cv2.resize(hdr, (self.image_size, self.image_size))
-        hdr = np.clip(hdr, 0, 1e6)
+        #hdr = np.clip(hdr, 0, 1e6)
+        hdr = np.clip(hdr, 0, 1)
         return hdr.astype(np.float32)
     
     def histogram_equalization(self, img):
@@ -268,7 +269,7 @@ def validate(model, dataloader, criterion, device):
                 gt_np = hdr_gt[batch_ind].cpu().numpy()
 
 # CRITICAL: Clip GT to match model output range
-                gt_np = np.clip(gt_np, -1, 1)
+                #gt_np = np.clip(gt_np, -1, 1)
 
 # Normalize both to [0, 1]
                 generated = (np.transpose(pred_np, (1, 2, 0)) + 1) / 2.0
@@ -277,12 +278,17 @@ def validate(model, dataloader, criterion, device):
                 
                 # Calculate SSIM with multichannel=True
 
+#                ssim_val = compare_ssim(
+#                    generated,
+#                    real,
+#                    channel_axis=-1,  # last axis is channels (RGB)
+#                    data_range=1.0,   # because generated/real are in [0, 1]
+#                    win_size=7        # <= min(H, W); 7 is standard
+#                )
                 ssim_val = compare_ssim(
                     generated,
                     real,
-                    channel_axis=-1,  # last axis is channels (RGB)
-                    data_range=1.0,   # because generated/real are in [0, 1]
-                    win_size=7        # <= min(H, W); 7 is standard
+                    multichannel=True  # Use old parameter name
                 )
 
 
