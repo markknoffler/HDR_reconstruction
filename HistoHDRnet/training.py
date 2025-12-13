@@ -288,8 +288,9 @@ def validate(model, dataloader, criterion, device):
                 ssim_val = compare_ssim(
                     generated,
                     real,
-                    multichannel=True  # Use old parameter name
+                    channel_axis=-1  # ✅ Tells scikit-image channels are at last axis
                 )
+
 
 
                 
