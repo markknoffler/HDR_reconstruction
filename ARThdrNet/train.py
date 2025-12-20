@@ -40,7 +40,7 @@ HDR_DIR = "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav
 CHECKPOINT_DIR = "./checkpoints"
 GENERATED_DIR = "./generated_images"
 CSV_LOG_FILE = "./training_log.csv"
-BATCH_SIZE = 2
+BATCH_SIZE = 1
 NUM_EPOCHS = 200
 LEARNING_RATE = 1e-4
 IMAGE_SIZE = 512
@@ -281,7 +281,7 @@ def train():
         train_dataset,
         batch_size=BATCH_SIZE,
         shuffle=True,
-        num_workers=2,
+        num_workers=1,
         pin_memory=True
     )
 
@@ -298,7 +298,7 @@ def train():
         val_subset,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        num_workers=2,
+        num_workers=4,
         pin_memory=True
     )
 
