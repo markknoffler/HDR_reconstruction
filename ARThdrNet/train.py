@@ -281,7 +281,7 @@ def train():
         train_dataset,
         batch_size=BATCH_SIZE,
         shuffle=True,
-        num_workers=4,
+        num_workers=2,
         pin_memory=True
     )
 
