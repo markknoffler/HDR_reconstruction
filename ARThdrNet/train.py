@@ -218,7 +218,8 @@ def validate(model, dataloader, criterion, device):
 
                 # Calculate MSE and PSNR
                 mse = mse_loss(pred_tonemapped, gt_tonemapped)
-                psnr_val = 10 * np.log10(1.0 / mse.item())
+                #psnr_val = 10 * np.log10(1.0 / mse.item())
+                psnr_val = 10 * np.log10(1.0 / (mse.item() + 1e-10))
 
                 # --- FIXED SSIM Calculation ---
                 pred_np = hdr_pred[batch_ind].cpu().numpy()

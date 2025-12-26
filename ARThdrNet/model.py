@@ -112,7 +112,8 @@ class FeedbackUnit(nn.Module):
         if self.hidden_state is None:
             self.hidden_state = fe_all
         else:
-            self.hidden_state = fe_all + self.hidden_state
+            #self.hidden_state = fe_all + self.hidden_state
+            self.hidden_state = self.hidden_state
         
         x = self.initial_compression(self.hidden_state)
         
@@ -234,8 +235,15 @@ class ArtHDRLoss(nn.Module):
         self.l1_loss = nn.L1Loss()
         self.perceptual_loss = VGGPerceptualLoss()
     
+#    def mu_law_compression(self, hdr):
+#        return torch.log(1 + self.mu * hdr) / torch.log(1 + torch.tensor(self.mu).to(hdr.device))
+#
     def mu_law_compression(self, hdr):
-        return torch.log(1 + self.mu * hdr) / torch.log(1 + torch.tensor(self.mu).to(hdr.device))
+    # Denormalize from [-1,1] to [0,1] first
+        hdr_positive = (hdr + 1.0) / 2.0  # Maps [-1,1] to [0,1]
+        hdr_positive = torch.clamp(hdr_positive, min=0.0)  # Ensure non-negative
+        return torch.log(1 + self.mu * hdr_positive) / torch.log(1 + torch.tensor(self.mu).to(hdr.device))
+
     
     def forward(self, hdr_outputs, hdr_gt):
         total_loss = 0
