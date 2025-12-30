@@ -197,5 +197,196 @@ class PFF_block_next(nn.Module):
 
         return x
 
+class ReconstructionUnit(nn.Module):
+    def __init__(self, in_channels=4096, out_channels=3):
+        super(ReconstructionUnit, self).__init__()
+        
+        self.up1 = nn.Sequential(
+            nn.Conv2d(in_channels, 1024, kernel_size=3, padding=1),
+            nn.BatchNorm2d(1024),
+            nn.ReLU(inplace=True),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+        )
+        self.proj1 = nn.Conv2d(1024 * 2, 1024, kernel_size=1)
+        
+        self.up2 = nn.Sequential(
+            nn.Conv2d(1024, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+        )
+        self.proj2 = nn.Conv2d(1024 * 2, 1024, kernel_size=1)
+        
+        self.up3 = nn.Sequential(
+            nn.Conv2d(512, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+        )
+        self.proj3 = nn.Conv2d(1024 * 2, 1024, kernel_size=1)
+        
+        self.up4 = nn.Sequential(
+            nn.Conv2d(256, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+        )
+        
+        self.up5 = nn.Sequential(
+            nn.Conv2d(128, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+        )
+        
+        self.reconstruction_net = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, out_channels, kernel_size=3, padding=1),
+            nn.Tanh()
+        )
+    
+    def forward(self, frs, comb_1, comb_2, comb_3, comb_4):
+        x = self.up1(comb_1)
+        x = torch.cat([x, comb_2], dim=1)
+        x = self.proj1(x)  
+        
+        x = self.up2(x)
+        x = torch.cat([x, comb_3], dim=1)
+        x = self.proj2(x)  
+        
+        x = self.up3(x)
+        x = torch.cat([x, comb_4], dim=1)
+        x = self.proj3(x)
+        
+        x = self.up4(x)
+        x = self.up5(x)
+        x = self.reconstruction_net(x)
+        return x
 
+class Dynamic_attention_model(nn.Module):
+    def __init__(self, layer1_channels, layer2_channels, layer3_channels, layer4_channels):
+        super().__init__()
+        
+        self.gamma_encoder = ResNetEncoder()
+        self.underexposed_encoder = ResNetEncoder()
+        self.overexposed_encoder = ResNetEncoder()
+        self.original_encoder = ResNetEncoder()
+        self.h_2_encoder = ResNetEncoder()
+        self.histoEQ_encoder = ResNetEncoder()
+        
+        self.gamma_dab1 = DAB_block(layer1_channels)
+        self.gamma_dab2 = DAB_block(layer2_channels)
+        self.gamma_dab3 = DAB_block(layer3_channels)
+        self.gamma_dab4 = DAB_block(layer4_channels)
+        self.gamma_proj1 = nn.Conv2d(layer1_channels * 2, layer1_channels, kernel_size=1)
+        self.gamma_proj2 = nn.Conv2d(layer2_channels * 2, layer2_channels, kernel_size=1)
+        self.gamma_proj3 = nn.Conv2d(layer3_channels * 2, layer3_channels, kernel_size=1)
+        self.gamma_proj4 = nn.Conv2d(layer4_channels * 2, layer4_channels, kernel_size=1)
+        
+        self.underexposed_dab1 = DAB_block(layer1_channels)
+        self.underexposed_dab2 = DAB_block(layer2_channels)
+        self.underexposed_dab3 = DAB_block(layer3_channels)
+        self.underexposed_dab4 = DAB_block(layer4_channels)
+        self.underexposed_proj1 = nn.Conv2d(layer1_channels * 2, layer1_channels, kernel_size=1)
+        self.underexposed_proj2 = nn.Conv2d(layer2_channels * 2, layer2_channels, kernel_size=1)
+        self.underexposed_proj3 = nn.Conv2d(layer3_channels * 2, layer3_channels, kernel_size=1)
+        self.underexposed_proj4 = nn.Conv2d(layer4_channels * 2, layer4_channels, kernel_size=1)
+        
+        self.overexposed_dab1 = DAB_block(layer1_channels)
+        self.overexposed_dab2 = DAB_block(layer2_channels)
+        self.overexposed_dab3 = DAB_block(layer3_channels)
+        self.overexposed_dab4 = DAB_block(layer4_channels)
+        self.overexposed_proj1 = nn.Conv2d(layer1_channels * 2, layer1_channels, kernel_size=1)
+        self.overexposed_proj2 = nn.Conv2d(layer2_channels * 2, layer2_channels, kernel_size=1)
+        self.overexposed_proj3 = nn.Conv2d(layer3_channels * 2, layer3_channels, kernel_size=1)
+        self.overexposed_proj4 = nn.Conv2d(layer4_channels * 2, layer4_channels, kernel_size=1)
+        
+        self.original_dab1 = DAB_block(layer1_channels)
+        self.original_dab2 = DAB_block(layer2_channels)
+        self.original_dab3 = DAB_block(layer3_channels)
+        self.original_dab4 = DAB_block(layer4_channels)
+        self.original_proj1 = nn.Conv2d(layer1_channels * 2, layer1_channels, kernel_size=1)
+        self.original_proj2 = nn.Conv2d(layer2_channels * 2, layer2_channels, kernel_size=1)
+        self.original_proj3 = nn.Conv2d(layer3_channels * 2, layer3_channels, kernel_size=1)
+        self.original_proj4 = nn.Conv2d(layer4_channels * 2, layer4_channels, kernel_size=1)
+        
+        self.h_2_dab1 = DAB_block(layer1_channels)
+        self.h_2_dab2 = DAB_block(layer2_channels)
+        self.h_2_dab3 = DAB_block(layer3_channels)
+        self.h_2_dab4 = DAB_block(layer4_channels)
+        self.h_2_proj1 = nn.Conv2d(layer1_channels * 2, layer1_channels, kernel_size=1)
+        self.h_2_proj2 = nn.Conv2d(layer2_channels * 2, layer2_channels, kernel_size=1)
+        self.h_2_proj3 = nn.Conv2d(layer3_channels * 2, layer3_channels, kernel_size=1)
+        self.h_2_proj4 = nn.Conv2d(layer4_channels * 2, layer4_channels, kernel_size=1)
+        
+        self.histoEQ_dab1 = DAB_block(layer1_channels)
+        self.histoEQ_dab2 = DAB_block(layer2_channels)
+        self.histoEQ_dab3 = DAB_block(layer3_channels)
+        self.histoEQ_dab4 = DAB_block(layer4_channels)
+        self.histoEQ_proj1 = nn.Conv2d(layer1_channels * 2, layer1_channels, kernel_size=1)
+        self.histoEQ_proj2 = nn.Conv2d(layer2_channels * 2, layer2_channels, kernel_size=1)
+        self.histoEQ_proj3 = nn.Conv2d(layer3_channels * 2, layer3_channels, kernel_size=1)
+        self.histoEQ_proj4 = nn.Conv2d(layer4_channels * 2, layer4_channels, kernel_size=1)
+        
+        self.pff_block_1 = PFF_block_pre(layer1_channels * 6, layer2_channels * 6)
+        self.pff_block_2 = PFF_block_3(layer1_channels * 6, layer2_channels * 6, layer3_channels * 6)
+        self.pff_block_3 = PFF_block_3(layer2_channels * 6, layer3_channels * 6, layer4_channels * 6)
+        self.pff_block_4 = PFF_block_next(layer3_channels * 6, layer4_channels * 6)
+        
+        self.reconstructed_image = ReconstructionUnit(layer1_channels * 6, layer2_channels * 6, layer3_channels * 6, layer4_channels * 6)
+    
+    def forward(self, gamma, underexposed, overexposed, original, h_2, histoEQ):
+        gamma_l1, gamma_l2, gamma_l3, gamma_l4 = self.gamma_encoder(gamma)
+        underexposed_l1, underexposed_l2, underexposed_l3, underexposed_l4 = self.underexposed_encoder(underexposed)
+        overexposed_l1, overexposed_l2, overexposed_l3, overexposed_l4 = self.overexposed_encoder(overexposed)
+        original_l1, original_l2, original_l3, original_l4 = self.original_encoder(original)
+        h_2_l1, h_2_l2, h_2_l3, h_2_l4 = self.h_2_encoder(h_2)
+        histoEQ_l1, histoEQ_l2, histoEQ_l3, histoEQ_l4 = self.histoEQ_encoder(histoEQ)
+        
+        gamma_l1 = self.gamma_proj1(torch.cat([gamma_l1, self.gamma_dab1(gamma_l1)], dim=1))
+        gamma_l2 = self.gamma_proj2(torch.cat([gamma_l2, self.gamma_dab2(gamma_l2)], dim=1))
+        gamma_l3 = self.gamma_proj3(torch.cat([gamma_l3, self.gamma_dab3(gamma_l3)], dim=1))
+        gamma_l4 = self.gamma_proj4(torch.cat([gamma_l4, self.gamma_dab4(gamma_l4)], dim=1))
+        
+        underexposed_l1 = self.underexposed_proj1(torch.cat([underexposed_l1, self.underexposed_dab1(underexposed_l1)], dim=1))
+        underexposed_l2 = self.underexposed_proj2(torch.cat([underexposed_l2, self.underexposed_dab2(underexposed_l2)], dim=1))
+        underexposed_l3 = self.underexposed_proj3(torch.cat([underexposed_l3, self.underexposed_dab3(underexposed_l3)], dim=1))
+        underexposed_l4 = self.underexposed_proj4(torch.cat([underexposed_l4, self.underexposed_dab4(underexposed_l4)], dim=1))
+        
+        overexposed_l1 = self.overexposed_proj1(torch.cat([overexposed_l1, self.overexposed_dab1(overexposed_l1)], dim=1))
+        overexposed_l2 = self.overexposed_proj2(torch.cat([overexposed_l2, self.overexposed_dab2(overexposed_l2)], dim=1))
+        overexposed_l3 = self.overexposed_proj3(torch.cat([overexposed_l3, self.overexposed_dab3(overexposed_l3)], dim=1))
+        overexposed_l4 = self.overexposed_proj4(torch.cat([overexposed_l4, self.overexposed_dab4(overexposed_l4)], dim=1))
+        
+        original_l1 = self.original_proj1(torch.cat([original_l1, self.original_dab1(original_l1)], dim=1))
+        original_l2 = self.original_proj2(torch.cat([original_l2, self.original_dab2(original_l2)], dim=1))
+        original_l3 = self.original_proj3(torch.cat([original_l3, self.original_dab3(original_l3)], dim=1))
+        original_l4 = self.original_proj4(torch.cat([original_l4, self.original_dab4(original_l4)], dim=1))
+        
+        h_2_l1 = self.h_2_proj1(torch.cat([h_2_l1, self.h_2_dab1(h_2_l1)], dim=1))
+        h_2_l2 = self.h_2_proj2(torch.cat([h_2_l2, self.h_2_dab2(h_2_l2)], dim=1))
+        h_2_l3 = self.h_2_proj3(torch.cat([h_2_l3, self.h_2_dab3(h_2_l3)], dim=1))
+        h_2_l4 = self.h_2_proj4(torch.cat([h_2_l4, self.h_2_dab4(h_2_l4)], dim=1))
+        
+        histoEQ_l1 = self.histoEQ_proj1(torch.cat([histoEQ_l1, self.histoEQ_dab1(histoEQ_l1)], dim=1))
+        histoEQ_l2 = self.histoEQ_proj2(torch.cat([histoEQ_l2, self.histoEQ_dab2(histoEQ_l2)], dim=1))
+        histoEQ_l3 = self.histoEQ_proj3(torch.cat([histoEQ_l3, self.histoEQ_dab3(histoEQ_l3)], dim=1))
+        histoEQ_l4 = self.histoEQ_proj4(torch.cat([histoEQ_l4, self.histoEQ_dab4(histoEQ_l4)], dim=1))
+        
+        layer1 = torch.cat([gamma_l1, underexposed_l1, overexposed_l1, original_l1, h_2_l1, histoEQ_l1], dim=1)
+        layer2 = torch.cat([gamma_l2, underexposed_l2, overexposed_l2, original_l2, h_2_l2, histoEQ_l2], dim=1)
+        layer3 = torch.cat([gamma_l3, underexposed_l3, overexposed_l3, original_l3, h_2_l3, histoEQ_l3], dim=1)
+        layer4 = torch.cat([gamma_l4, underexposed_l4, overexposed_l4, original_l4, h_2_l4, histoEQ_l4], dim=1)
+        
+        pff1 = self.pff_block_1(layer1, layer2)
+        pff2 = self.pff_block_2(layer1, layer2, layer3)
+        pff3 = self.pff_block_3(layer2, layer3, layer4)
+        pff4 = self.pff_block_4(layer3, layer4)
+        
+        output = self.reconstructed_image(layer1, layer2, layer3, layer4)
+        
+        return output
 

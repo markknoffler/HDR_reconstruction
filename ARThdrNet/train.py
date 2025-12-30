@@ -213,8 +213,17 @@ def validate(model, dataloader, criterion, device):
             for batch_ind in range(hdr_pred.size(0)):
                 # --- FHDR-style PSNR Calculation ---
                 # Apply mu-tonemap to individual images
-                pred_tonemapped = mu_tonemap(hdr_pred[batch_ind:batch_ind+1])
-                gt_tonemapped = mu_tonemap(hdr_gt[batch_ind:batch_ind+1])
+                pred_denorm = hdr_pred[batch_ind:batch_ind+1] * 0.5 + 0.5
+                gt_denorm = hdr_gt[batch_ind:batch_ind+1] * 0.5 + 0.5
+
+                pred_denorm = torch.clamp(pred_denorm, 0, 1)
+                gt_denorm = torch.clamp(gt_denorm, 0, 1)
+
+#                pred_tonemapped = mu_tonemap(hdr_pred[batch_ind:batch_ind+1])
+#                gt_tonemapped = mu_tonemap(hdr_gt[batch_ind:batch_ind+1])
+                pred_tonemapped = mu_tonemap(pred_denorm)
+                gt_tonemapped = mu_tonemap(gt_denorm)
+
 
                 # Calculate MSE and PSNR
                 mse = mse_loss(pred_tonemapped, gt_tonemapped)
@@ -237,10 +246,12 @@ def validate(model, dataloader, criterion, device):
                 )
 
                 # --- HDR-VDP2 Proxy Metric ---
-                hdrvdp2_val = compute_hdrvdp2_metric(
-                    hdr_pred[batch_ind:batch_ind+1],
-                    hdr_gt[batch_ind:batch_ind+1]
-                )
+#                hdrvdp2_val = compute_hdrvdp2_metric(
+#                    hdr_pred[batch_ind:batch_ind+1],
+#                    hdr_gt[batch_ind:batch_ind+1]
+#                )
+                hdrvdp2_val = compute_hdrvdp2_metric(pred_denorm, gt_denorm)
+
 
                 # Accumulate metrics
                 total_psnr += psnr_val
