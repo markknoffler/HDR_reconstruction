@@ -216,8 +216,8 @@ def validate(model, dataloader, criterion, device):
                 pred_denorm = hdr_pred[batch_ind:batch_ind+1] * 0.5 + 0.5
                 gt_denorm = hdr_gt[batch_ind:batch_ind+1] * 0.5 + 0.5
 
-                pred_denorm = torch.clamp(pred_denorm, 0, 1)
-                gt_denorm = torch.clamp(gt_denorm, 0, 1)
+#                pred_denorm = torch.clamp(pred_denorm, 0, 1)
+#                gt_denorm = torch.clamp(gt_denorm, 0, 1)
 
 #                pred_tonemapped = mu_tonemap(hdr_pred[batch_ind:batch_ind+1])
 #                gt_tonemapped = mu_tonemap(hdr_gt[batch_ind:batch_ind+1])
