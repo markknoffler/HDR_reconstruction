@@ -112,8 +112,8 @@ class FeedbackUnit(nn.Module):
         if self.hidden_state is None:
             self.hidden_state = fe_all
         else:
-            #self.hidden_state = fe_all + self.hidden_state
-            self.hidden_state = self.hidden_state
+            self.hidden_state = fe_all + self.hidden_state
+            #self.hidden_state = self.hidden_state
         
         x = self.initial_compression(self.hidden_state)
         
