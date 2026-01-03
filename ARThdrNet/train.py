@@ -44,7 +44,7 @@ BATCH_SIZE = 1
 NUM_EPOCHS = 200
 LEARNING_RATE = 1e-4
 IMAGE_SIZE = 512
-ACCUMULATION_STEPS = 5
+ACCUMULATION_STEPS = 1
 DEVICE = "cuda:0"
 
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
@@ -289,13 +289,6 @@ def train():
     print("=" * 80)
 
     train_dataset = HDRDataset(LDR_DIR, HDR_DIR, IMAGE_SIZE, mode='train')
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=BATCH_SIZE,
-        shuffle=True,
-        num_workers=1,
-        pin_memory=True
-    )
 
     #init_hdrvdp2()
 
@@ -305,6 +298,15 @@ def train():
         train_dataset,
         [train_size, val_split]
     )
+
+    train_loader = DataLoader(
+        train_subset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=1,
+        pin_memory=True
+    )
+
 
     val_loader = DataLoader(
         val_subset,
@@ -366,13 +368,18 @@ def train():
             hdr_outputs = model(ldr_gt)
 
             loss = criterion(hdr_outputs, hdr_gt)
-            loss = loss / ACCUMULATION_STEPS
-            loss.backward()
+            #loss = loss / ACCUMULATION_STEPS
+            #loss.backward()
 
-            if (batch_idx + 1) % ACCUMULATION_STEPS == 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                optimizer.step()
-                optimizer.zero_grad()
+#            if (batch_idx + 1) % ACCUMULATION_STEPS == 0:
+#                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+#                optimizer.step()
+#                optimizer.zero_grad()
+
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
 
             epoch_loss += loss.item() * ACCUMULATION_STEPS
 
