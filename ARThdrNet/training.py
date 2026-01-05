@@ -141,7 +141,7 @@ class HDRDataset(Dataset):
         
         ldr_img = cv2.cvtColor(ldr_img, cv2.COLOR_BGR2RGB)
         ldr_img = ldr_img.astype(np.float32) / 255.0  # [0, 1]
-        ldr_img = 2.0 * ldr_img - 1.0  # [-1, 1]
+        #ldr_img = 2.0 * ldr_img - 1.0  # [-1, 1]
         ldr_img = torch.from_numpy(ldr_img).permute(2, 0, 1)  # HWC to CHW
         
         # Load HDR image
@@ -169,10 +169,13 @@ class HDRDataset(Dataset):
         hdr_img = hdr_img.astype(np.float32)
         # Normalize HDR to [-1, 1] range
         # This depends on your HDR data - adjust as needed
-        if hdr_img.max() > 1.0:
-            hdr_img = hdr_img / hdr_img.max()  # Normalize to [0, 1]
-        hdr_img = 2.0 * hdr_img - 1.0  # [-1, 1]
-        
+        hdr_img = hdr_img.astype(np.float32)
+        hdr_img = np.clip(hdr_img, 0.0, None)
+        maxv = float(hdr_img.max())
+        if maxv > 0:
+            hdr_img = hdr_img / maxv
+        hdr_img = 2.0 * hdr_img - 1.0
+
         hdr_img = torch.from_numpy(hdr_img).permute(2, 0, 1)  # HWC to CHW
         
         return {
@@ -441,6 +444,7 @@ def main():
 
 
     sanity_check(model, criterion, optimizer, train_loader, val_loader, device)
+
     
     # ========================================
     # Training loop
