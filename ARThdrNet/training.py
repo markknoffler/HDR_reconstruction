@@ -87,12 +87,12 @@ def compute_psnr_ssim(pred, gt):
     
     # For multi-channel images, use multichannel=True
     ssim = structural_similarity(
-        pred_np, gt_np, 
-        multichannel=True, 
-        data_range=1.0, 
+        pred_np, gt_np,
+        data_range=1.0,
         win_size=11,
-        channel_axis=-1 if pred_np.shape[-1] == 3 else None
+        channel_axis=-1
     )
+
     
     return psnr, ssim
 
@@ -154,8 +154,13 @@ class HDRDataset(Dataset):
             else:
                 # For .hdr files, you might need a custom loader
                 # Here's a simple placeholder - adjust as needed
-                import imageio
-                hdr_img = imageio.imread(hdr_path, format='HDR-FI')
+                hdr_img = cv2.imread(hdr_path, cv2.IMREAD_UNCHANGED)
+                if hdr_img is None:
+                    raise ValueError(f"Failed to load HDR image: {hdr_path}")
+                hdr_img = cv2.cvtColor(hdr_img, cv2.COLOR_BGR2RGB)
+                hdr_img = hdr_img.astype(np.float32)
+
+
         except:
             # If loading fails, create a dummy HDR image
             print(f"Warning: Could not load HDR image {hdr_path}, using dummy")
@@ -234,8 +239,8 @@ def validate_model(model, val_loader, device, epoch, save_samples=False):
             
             # Calculate metrics for each image in batch
             for i in range(hdr_pred.shape[0]):
-                pred_img = hdr_pred[i:i+1]
-                gt_img = ground_truth[i:i+1]
+                pred_img = hdr_pred[i]
+                gt_img = ground_truth[i]
                 
                 # Compute PSNR and SSIM
                 psnr, ssim = compute_psnr_ssim(pred_img, gt_img)
@@ -278,6 +283,62 @@ def save_metrics_to_csv(csv_path, epoch, train_loss, val_psnr, val_ssim, val_hdr
             'val_ssim': f"{val_ssim:.4f}",
             'val_hdrvdp': f"{val_hdrvdp:.4f}"
         })
+
+def unwrap_loss(loss_out):
+    if isinstance(loss_out, (tuple, list)):
+        return loss_out[0]
+    if isinstance(loss_out, dict):
+        return loss_out["loss"]
+    return loss_out
+
+
+def sanity_check(model, criterion, optimizer, train_loader, val_loader, device):
+    # ---- one TRAIN step ----
+    model.train()
+    data = next(iter(train_loader))
+    input_ldr = data["ldr_image"].to(device)
+    ground_truth = data["hdr_image"].to(device)
+
+    outputs = model(input_ldr)
+    loss_out = criterion(outputs, ground_truth)
+    loss = unwrap_loss(loss_out)
+
+    optimizer.zero_grad(set_to_none=True)
+    loss.backward()
+    optimizer.step()
+
+    with torch.no_grad():
+        pred = outputs[-1]
+        print("[SANITY][TRAIN] loss:", float(loss.item()))
+        print("[SANITY][TRAIN] shapes:",
+              "ldr", tuple(input_ldr.shape),
+              "gt", tuple(ground_truth.shape),
+              "pred", tuple(pred.shape))
+        # quick “dummy HDR” detection (all-ones -> near-zero std after normalization)
+        print("[SANITY][TRAIN] gt std:", float(ground_truth.std().item()))
+
+    # ---- one VAL step (validate_model logic, but just 1 batch) ----
+    model.eval()
+    with torch.no_grad():
+        data = next(iter(val_loader))
+        input_ldr = data["ldr_image"].to(device)
+        ground_truth = data["hdr_image"].to(device)
+
+        outputs = model(input_ldr)
+        pred = outputs[-1]
+
+        # IMPORTANT: use (C,H,W) not (1,C,H,W)
+        pred_img = pred[0]
+        gt_img = ground_truth[0]
+
+        psnr, ssim = compute_psnr_ssim(pred_img, gt_img)
+        hdrvdp = compute_hdrvdp2_metric(pred_img, gt_img)
+
+        print("[SANITY][VAL] psnr:", float(psnr), "ssim:", float(ssim), "hdrvdp:", float(hdrvdp))
+        print("[SANITY][VAL] gt std:", float(ground_truth.std().item()))
+
+    model.train()
+
 
 
 def main():
@@ -377,6 +438,11 @@ def main():
             print(e)
             print("Checkpoint not found! Training from scratch.")
             start_epoch = 1
+
+
+    sanity_check(model, criterion, optimizer, train_loader, val_loader, device)
+    return
+
     
     # ========================================
     # Training loop
@@ -406,13 +472,20 @@ def main():
             outputs = model(input_ldr)
             
             # Calculate loss
-            loss = criterion(outputs, ground_truth)
+            loss_out = criterion(outputs, ground_truth)
+
+            if isinstance(loss_out, (tuple, list)):
+                loss = loss_out[0]          # total loss
+            elif isinstance(loss_out, dict):
+                loss = loss_out["loss"]     # or whatever key your loss uses
+            else:
+                loss = loss_out
+
+            running_loss += loss.item()
+            loss.backward()
             
             # Backward pass and optimize
-            loss.backward()
             optimizer.step()
-            
-            running_loss += loss.item()
             num_batches += 1
             
             # Log batch information
