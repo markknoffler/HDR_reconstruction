@@ -15,7 +15,7 @@ import argparse
 # Import from FHDR code structure
 from model import ArtHDRNet, ArtHDRLoss
 from options import Options
-from util import (
+from utils import (
     load_checkpoint,
     make_required_directories,
     mu_tonemap,
