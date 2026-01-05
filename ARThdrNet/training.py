@@ -441,8 +441,6 @@ def main():
 
 
     sanity_check(model, criterion, optimizer, train_loader, val_loader, device)
-    return
-
     
     # ========================================
     # Training loop
