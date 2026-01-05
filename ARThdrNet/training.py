@@ -346,8 +346,9 @@ def main():
     # Loss and optimizer
     # ========================================
     # Use ArtHDRLoss from model.py
-    criterion = ArtHDRLoss(lambda1=0.1, lambda2=0.5, mu=5000)
+    criterion = ArtHDRLoss(lambda1=0.1, lambda2=0.5, mu=5000).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(0.9, 0.999))
+
     
     # ========================================
     # Load checkpoint if continuing training
