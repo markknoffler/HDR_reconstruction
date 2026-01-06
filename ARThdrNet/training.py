@@ -53,48 +53,67 @@ def compute_hdrvdp2_metric(hdr_pred, hdr_gt):
     # Normalize PSNR to a 0-10 "quality" score
     return float(np.clip(psnr_val / 10.0, 0.0, 10.0))
 
-
 def compute_psnr_ssim(pred, gt):
     """
-    Compute PSNR and SSIM similar to FHDR code.
-    Both images should be in range [-1, 1]
+    Compute PSNR-μ and SSIM matching FHDR implementation.
+    
+    Args:
+        pred: Predicted HDR (C, H, W) in [-1, 1]
+        gt: Ground truth HDR (C, H, W) in [-1, 1]
+    
+    Returns:
+        psnr: PSNR-μ in dB
+        ssim: SSIM value
     """
-    # Convert to numpy and scale to [0, 1]
+    # Convert to numpy
     pred_np = pred.detach().cpu().numpy()
     gt_np = gt.detach().cpu().numpy()
     
-    # Ensure correct shape: (C, H, W) -> (H, W, C)
-    if pred_np.shape[0] == 3:  # If channels first
+    # Transpose: (C, H, W) → (H, W, C)
+    if pred_np.shape[0] == 3:
         pred_np = np.transpose(pred_np, (1, 2, 0))
         gt_np = np.transpose(gt_np, (1, 2, 0))
     
-    # Scale from [-1, 1] to [0, 1]
-    pred_np = (pred_np + 1) / 2.0
-    gt_np = (gt_np + 1) / 2.0
+    # Convert [-1, 1] to [0, 1]
+    pred_np = (pred_np + 1.0) / 2.0
+    gt_np = (gt_np + 1.0) / 2.0
     
-    # Calculate PSNR (using mu-tonemap like in FHDR)
+    # Clip for numerical stability
+    pred_np = np.clip(pred_np, 0.0, 1.0)
+    gt_np = np.clip(gt_np, 0.0, 1.0)
+    
+    # PSNR-μ (matching FHDR)
     mu = 5000.0
     pred_tm = np.log(1.0 + mu * pred_np) / np.log(1.0 + mu)
     gt_tm = np.log(1.0 + mu * gt_np) / np.log(1.0 + mu)
-    
     mse = np.mean((pred_tm - gt_tm) ** 2)
-    psnr = 10 * np.log10(1.0 / (mse + 1e-10))
     
-    # Calculate SSIM
-    # Ensure images are float32
-    pred_np = pred_np.astype(np.float32)
-    gt_np = gt_np.astype(np.float32)
+    if mse == 0:
+        psnr = 100.0
+    else:
+        psnr = 10.0 * np.log10(1.0 / mse)  # NO epsilon
     
-    # For multi-channel images, use multichannel=True
-    ssim = structural_similarity(
-        pred_np, gt_np,
-        data_range=1.0,
-        win_size=11,
-        channel_axis=-1
-    )
-
+    # SSIM (matching FHDR)
+    pred_np = pred_np.astype(np.float64)
+    gt_np = gt_np.astype(np.float64)
+    
+    try:
+        # Newer scikit-image API
+        ssim = structural_similarity(
+            pred_np, gt_np,
+            channel_axis=-1,
+            data_range=pred_np.max() - pred_np.min()
+        )
+    except TypeError:
+        # Older API fallback
+        ssim = structural_similarity(
+            pred_np, gt_np,
+            multichannel=True,
+            data_range=pred_np.max() - pred_np.min()
+        )
     
     return psnr, ssim
+
 
 
 class HDRDataset(Dataset):
