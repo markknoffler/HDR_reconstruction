@@ -639,7 +639,7 @@ def main():
 #            scaler.update()
 
             # Forward pass with autocast
-            with autocast('cuda'):
+            with autocast():
                 outputs = model(gamma, underexposed, overexposed, original, clahe, hist_eq)
                 loss_out = criterion(outputs, ground_truth)
                 if isinstance(loss_out, (tuple, list)):
