@@ -476,10 +476,10 @@ class Dynamic_attention_model(nn.Module):
         original_l4 = self.original_proj4(torch.cat([original_l4, self.original_dab4(original_l4)], dim=1))
         
         # Apply DAB blocks and projections for h2
-        h2_l1 = self.h2_proj1(torch.cat([h2_l1, self.h2_dab1(h2_l1)], dim=1))
-        h2_l2 = self.h2_proj2(torch.cat([h2_l2, self.h2_dab2(h2_l2)], dim=1))
-        h2_l3 = self.h2_proj3(torch.cat([h2_l3, self.h2_dab3(h2_l3)], dim=1))
-        h2_l4 = self.h2_proj4(torch.cat([h2_l4, self.h2_dab4(h2_l4)], dim=1))
+        h2_l1 = self.h_2_proj1(torch.cat([h2_l1, self.h2_dab1(h2_l1)], dim=1))
+        h2_l2 = self.h_2_proj2(torch.cat([h2_l2, self.h2_dab2(h2_l2)], dim=1))
+        h2_l3 = self.h_2_proj3(torch.cat([h2_l3, self.h2_dab3(h2_l3)], dim=1))
+        h2_l4 = self.h_2_proj4(torch.cat([h2_l4, self.h2_dab4(h2_l4)], dim=1))
         
         # Apply DAB blocks and projections for histoEQ
         histoEQ_l1 = self.histoEQ_proj1(torch.cat([histoEQ_l1, self.histoEQ_dab1(histoEQ_l1)], dim=1))
