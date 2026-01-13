@@ -337,7 +337,7 @@ class ReconstructionUnit(nn.Module):
 
 
 class Dynamic_attention_model(nn.Module):
-    def __init__(self, layer1_channels, layer2_channels, layer3_channels, layer4_channels):
+ def __init__(self, layer1_channels, layer2_channels, layer3_channels, layer4_channels):
         super().__init__()
         
         self.gamma_encoder = ResNetEncoder()
@@ -402,8 +402,10 @@ class Dynamic_attention_model(nn.Module):
         self.histoEQ_proj4 = nn.Conv2d(layer4_channels * 2, layer4_channels, kernel_size=1)
         
         self.pff_block_1 = PFF_block_pre(layer1_channels * 6, layer2_channels * 6)
-        self.pff_block_2 = PFF_block_3(layer1_channels * 6, layer2_channels * 6, layer3_channels * 6)
-        self.pff_block_3 = PFF_block_3(layer2_channels * 6, layer3_channels * 6, layer4_channels * 6)
+        #self.pff_block_2 = PFF_block_3(layer1_channels * 6, layer2_channels * 6, layer3_channels * 6)
+        #self.pff_block_3 = PFF_block_3(layer2_channels * 6, layer3_channels * 6, layer4_channels * 6)
+        self.pff_block_2 = PFF_block_3(layer1_channels * 6, layer2_channels * 6, layer3_channels * 6, DAB_block)
+        self.pff_block_3 = PFF_block_3(layer2_channels * 6, layer3_channels * 6, layer4_channels * 6, DAB_block)
         self.pff_block_4 = PFF_block_next(layer3_channels * 6, layer4_channels * 6)
         
         self.reconstructed_image = ReconstructionUnit(layer1_channels * 6, layer2_channels * 6, layer3_channels * 6, layer4_channels * 6)
