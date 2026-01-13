@@ -172,7 +172,7 @@ class PFF_block_pre(nn.Module):
         return x
 
 class PFF_block_next(nn.Module):
-    def __init__(self, ch_prev, ch_curr):
+    def __init__(self, ch_curr, ch_prev):
         super().__init__()
         self.down_dw = DepthwiseConv2d(ch_prev, kernel_size=2, stride=2)
         self.down_1x1 = nn.Conv2d(ch_prev, ch_curr, kernel_size=1, stride=1, padding=0)
@@ -406,7 +406,9 @@ class Dynamic_attention_model(nn.Module):
         #self.pff_block_3 = PFF_block_3(layer2_channels * 6, layer3_channels * 6, layer4_channels * 6)
         self.pff_block_2 = PFF_block_3(layer1_channels * 6, layer2_channels * 6, layer3_channels * 6, DAB_block)
         self.pff_block_3 = PFF_block_3(layer2_channels * 6, layer3_channels * 6, layer4_channels * 6, DAB_block)
-        self.pff_block_4 = PFF_block_next(layer3_channels * 6, layer4_channels * 6)
+        #self.pff_block_4 = PFF_block_next(layer3_channels * 6, layer4_channels * 6)
+        self.pff_block_4 = PFF_block_next(layer4_channels * 6, layer3_channels * 6)
+
         
         self.reconstructed_image = ReconstructionUnit(layer1_channels * 6, layer2_channels * 6, layer3_channels * 6, layer4_channels * 6)
     
@@ -456,7 +458,8 @@ class Dynamic_attention_model(nn.Module):
         pff1 = self.pff_block_1(layer1, layer2)
         pff2 = self.pff_block_2(layer1, layer2, layer3)
         pff3 = self.pff_block_3(layer2, layer3, layer4)
-        pff4 = self.pff_block_4(layer3, layer4)
+        #pff4 = self.pff_block_4(layer3, layer4)
+        pff4 = self.pff_block_4(layer4, layer3)
         
         output = self.reconstructed_image(pff1, pff2, pff3, pff4)
 
