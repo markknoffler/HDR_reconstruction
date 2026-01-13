@@ -72,7 +72,7 @@ class SeparateEncodersHDR(nn.Module):
 
         f1_ = self.enc1(x1)
         f2_ = self.enc2(x2)
-        f3_ = self.enc:3(x3)
+        f3_ = self.enc3(x3)
         f4_ = self.enc4(x4)
         f5_ = self.enc5(x5)
         f6_ = self.enc6(x6)
@@ -84,10 +84,10 @@ class SeparateEncodersHDR(nn.Module):
         f5_deep = f5_[-1]
         f6_deep = f6_[-1]
 
-        return f1_deep. f2_deep, f3_deep, f4_deep, f5_deep, f6_deep
+        return f1_deep, f2_deep, f3_deep, f4_deep, f5_deep, f6_deep
 
 class DAB_block(nn.Module):
-    def __init__(self):
+    def __init__(self, channels):
         super().__init__()
         self.ca_fc = nn.Linear(channels, channels)
         self.pa_conv = nn.Conv2d(channels, channels, kernel_size=1, stride=1, padding=0)
@@ -111,18 +111,18 @@ class DAB_block(nn.Module):
         return out
 
 class PFF_block_3(nn.Module):
-    def __init__(self, ch_pre, ch_cur, ch_nex, dab_block_cls):
+    def __init__(self, ch_pre, ch_curr, ch_nex, dab_block_cls):
         super().__init__()
-        self.down_dw = DepthwiseConv2D(ch_pre, kernel_size=2, stride=2)
-        self.down_1x1 = nn.Conv2d(ch_pre, ch_cur, kernel_size=1, stride =1, padding=0)
+        self.down_dw = DepthwiseConv2d(ch_pre, kernel_size=2, stride=2)
+        self.down_1x1 = nn.Conv2d(ch_pre, ch_curr, kernel_size=1, stride =1, padding=0)
 
-        self.up_1x1 = nn.Conv2d(ch_nex, ch_curr, kernel_size=1, size=1, padding=0)
+        self.up_1x1 = nn.Conv2d(ch_nex, ch_curr, kernel_size=1, stride=1, padding=0)
         self.upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
 
         concat_channels =  ch_curr * 2 
         self.dab = DAB_block(concat_channels)
 
-        self.out_1x1 = nn.Conv2d(concat_channels, ch_cur, kernel_size=1, stride=1, padding=0)
+        self.out_1x1 = nn.Conv2d(concat_channels, ch_curr, kernel_size=1, stride=1, padding=0)
 
         self.act = nn.LeakyReLU(negative_slope=0.0, inplace=True)
 
@@ -174,7 +174,7 @@ class PFF_block_pre(nn.Module):
 class PFF_block_next(nn.Module):
     def __init__(self, ch_curr, ch_prev):
         super().__init__()
-        self.down_dw = DepthwiseConv2D(ch_prev, kernel_size=2, stride=2)
+        self.down_dw = DepthwiseConv2d(ch_prev, kernel_size=2, stride=2)
         self.down_1x1 = nn.Conv2d(ch_prev, ch_curr, kernel_size=1, stride=1, padding=0)
 
         concat_channels = 2 * ch_curr
@@ -197,17 +197,87 @@ class PFF_block_next(nn.Module):
 
         return x
 
+#class ReconstructionUnit(nn.Module):
+#    def __init__(self, channels_1, channels_2, channels_3, channels_4, out_channels=3):
+#        super(ReconstructionUnit, self).__init__()
+#        
+#        self.up1 = nn.Sequential(
+#            nn.Conv2d(in_channels, 1024, kernel_size=3, padding=1),
+#            nn.BatchNorm2d(1024),
+#            nn.ReLU(inplace=True),
+#            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+#        )
+#        self.proj1 = nn.Conv2d(1024 * 2, 1024, kernel_size=1)
+#        
+#        self.up2 = nn.Sequential(
+#            nn.Conv2d(1024, 512, kernel_size=3, padding=1),
+#            nn.BatchNorm2d(512),
+#            nn.ReLU(inplace=True),
+#            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+#        )
+#        self.proj2 = nn.Conv2d(1024 * 2, 1024, kernel_size=1)
+#        
+#        self.up3 = nn.Sequential(
+#            nn.Conv2d(512, 256, kernel_size=3, padding=1),
+#            nn.BatchNorm2d(256),
+#            nn.ReLU(inplace=True),
+#            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+#        )
+#        self.proj3 = nn.Conv2d(1024 * 2, 1024, kernel_size=1)
+#        
+#        self.up4 = nn.Sequential(
+#            nn.Conv2d(256, 128, kernel_size=3, padding=1),
+#            nn.BatchNorm2d(128),
+#            nn.ReLU(inplace=True),
+#            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+#        )
+#        
+#        self.up5 = nn.Sequential(
+#            nn.Conv2d(128, 64, kernel_size=3, padding=1),
+#            nn.BatchNorm2d(64),
+#            nn.ReLU(inplace=True),
+#            nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+#        )
+#        
+#        self.reconstruction_net = nn.Sequential(
+#            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+#            nn.ReLU(inplace=True),
+#            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+#            nn.ReLU(inplace=True),
+#            nn.Conv2d(64, out_channels, kernel_size=3, padding=1),
+#            nn.Tanh()
+#        )
+#    
+#    def forward(self, frs, comb_1, comb_2, comb_3, comb_4):
+#        x = self.up1(comb_1)
+#        x = torch.cat([x, comb_2], dim=1)
+#        x = self.proj1(x)  
+#        
+#        x = self.up2(x)
+#        x = torch.cat([x, comb_3], dim=1)
+#        x = self.proj2(x)  
+#        
+#        x = self.up3(x)
+#        x = torch.cat([x, comb_4], dim=1)
+#        x = self.proj3(x)
+#        
+#        x = self.up4(x)
+#        x = self.up5(x)
+#        x = self.reconstruction_net(x)
+#        return x
+
 class ReconstructionUnit(nn.Module):
-    def __init__(self, in_channels=4096, out_channels=3):
+    def __init__(self, channels_1, channels_2, channels_3, channels_4, out_channels=3):
         super(ReconstructionUnit, self).__init__()
         
         self.up1 = nn.Sequential(
-            nn.Conv2d(in_channels, 1024, kernel_size=3, padding=1),
+            nn.Conv2d(channels_4, 1024, kernel_size=3, padding=1),
             nn.BatchNorm2d(1024),
             nn.ReLU(inplace=True),
             nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
         )
-        self.proj1 = nn.Conv2d(1024 * 2, 1024, kernel_size=1)
+        
+        self.proj1 = nn.Conv2d(1024 + channels_3, 1024, kernel_size=1)
         
         self.up2 = nn.Sequential(
             nn.Conv2d(1024, 512, kernel_size=3, padding=1),
@@ -215,7 +285,8 @@ class ReconstructionUnit(nn.Module):
             nn.ReLU(inplace=True),
             nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
         )
-        self.proj2 = nn.Conv2d(1024 * 2, 1024, kernel_size=1)
+        
+        self.proj2 = nn.Conv2d(512 + channels_2, 512, kernel_size=1)
         
         self.up3 = nn.Sequential(
             nn.Conv2d(512, 256, kernel_size=3, padding=1),
@@ -223,7 +294,8 @@ class ReconstructionUnit(nn.Module):
             nn.ReLU(inplace=True),
             nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
         )
-        self.proj3 = nn.Conv2d(1024 * 2, 1024, kernel_size=1)
+        
+        self.proj3 = nn.Conv2d(256 + channels_1, 256, kernel_size=1)
         
         self.up4 = nn.Sequential(
             nn.Conv2d(256, 128, kernel_size=3, padding=1),
@@ -248,23 +320,21 @@ class ReconstructionUnit(nn.Module):
             nn.Tanh()
         )
     
-    def forward(self, frs, comb_1, comb_2, comb_3, comb_4):
-        x = self.up1(comb_1)
-        x = torch.cat([x, comb_2], dim=1)
-        x = self.proj1(x)  
-        
+    def forward(self, pff1, pff2, pff3, pff4):
+        x = self.up1(pff4)
+        x = torch.cat([x, pff3], dim=1)
+        x = self.proj1(x)
         x = self.up2(x)
-        x = torch.cat([x, comb_3], dim=1)
-        x = self.proj2(x)  
-        
+        x = torch.cat([x, pff2], dim=1)
+        x = self.proj2(x)
         x = self.up3(x)
-        x = torch.cat([x, comb_4], dim=1)
+        x = torch.cat([x, pff1], dim=1)
         x = self.proj3(x)
-        
         x = self.up4(x)
         x = self.up5(x)
         x = self.reconstruction_net(x)
         return x
+
 
 class Dynamic_attention_model(nn.Module):
     def __init__(self, layer1_channels, layer2_channels, layer3_channels, layer4_channels):
@@ -386,7 +456,8 @@ class Dynamic_attention_model(nn.Module):
         pff3 = self.pff_block_3(layer2, layer3, layer4)
         pff4 = self.pff_block_4(layer3, layer4)
         
-        output = self.reconstructed_image(layer1, layer2, layer3, layer4)
+        output = self.reconstructed_image(pff1, pff2, pff3, pff4)
+
         
         return output
 
