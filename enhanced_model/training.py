@@ -359,7 +359,7 @@ def sanity_check(model, criterion, optimizer, train_loader, val_loader, device, 
 
     # ---- one VAL step (validate_model logic, but just 1 batch) ----
     model.eval()
- with torch.no_grad():
+    with torch.no_grad():
         data = next(iter(val_loader))
         input_ldr = data["ldr_image"].to(device)
         ground_truth = data["hdr_image"].to(device)
