@@ -34,9 +34,6 @@ from skimage.metrics import structural_similarity as compare_ssim
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 import cv2
 
-data_loader = DataLoader(dataset, batch_size=opt.batch_size, shuffle=True)
-mse_loss = nn.MSELoss()
-
 class HDRVDPMetrics:
     """
     HDR-VDP metric calculator using FovVideoVDP (modern successor to HDR-VDP-2/3).
