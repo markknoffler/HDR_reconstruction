@@ -578,7 +578,7 @@ def main():
             start_epoch = 1
 
 
-    sanity_check(model, criterion, optimizer, train_loader, val_loader, device, hdrvdp_calculator)
+    #sanity_check(model, criterion, optimizer, train_loader, val_loader, device, hdrvdp_calculator)
 
     
     # ========================================
