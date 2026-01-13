@@ -348,7 +348,7 @@ class Dynamic_attention_model(nn.Module):
         self.h_2_encoder = ResNetEncoder()
         self.histoEQ_encoder = ResNetEncoder()
 
-        self.cpu_encoders = [self.original_encoder, self.h2_encoder, self.histoEQ_encoder]
+        self.cpu_encoders = [self.original_encoder, self.h_2_encoder, self.histoEQ_encoder]
 
         
         self.gamma_dab1 = DAB_block(layer1_channels)
