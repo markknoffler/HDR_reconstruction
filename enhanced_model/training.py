@@ -619,24 +619,43 @@ def main():
             outputs = model(gamma, underexposed, overexposed, original, clahe, hist_eq)
             
             # Calculate loss
-            loss_out = criterion(outputs, ground_truth)
+#            loss_out = criterion(outputs, ground_truth)
+#
+#            if isinstance(loss_out, (tuple, list)):
+#                loss = loss_out[0]          # total loss
+#            elif isinstance(loss_out, dict):
+#                loss = loss_out["loss"]     # or whatever key your loss uses
+#            else:
+#                loss = loss_out
+#
+#            running_loss += loss.item()
+#            loss.backward()
+#            
+#            # Backward pass and optimize
+#            optimizer.step()
+#
+#            scaler.scale(loss).backward()
+#            scaler.step(optimizer)
+#            scaler.update()
 
-            if isinstance(loss_out, (tuple, list)):
-                loss = loss_out[0]          # total loss
-            elif isinstance(loss_out, dict):
-                loss = loss_out["loss"]     # or whatever key your loss uses
-            else:
-                loss = loss_out
+            # Forward pass with autocast
+            with autocast('cuda'):
+                outputs = model(gamma, underexposed, overexposed, original, clahe, hist_eq)
+                loss_out = criterion(outputs, ground_truth)
+                if isinstance(loss_out, (tuple, list)):
+                    loss = loss_out[0]
+                elif isinstance(loss_out, dict):
+                    loss = loss_out["loss"]
+                else:
+                    loss = loss_out
 
             running_loss += loss.item()
-            loss.backward()
-            
-            # Backward pass and optimize
-            optimizer.step()
 
+# Backward pass with scaler
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
+
 
             num_batches += 1
             
