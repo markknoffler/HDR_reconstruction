@@ -439,7 +439,7 @@ class Dynamic_attention_model(nn.Module):
         original_l3 = original_l3.to(device)
         original_l4 = original_l4.to(device)
         
-        h2_l1, h2_l2, h2_l3, h2_l4 = self.h2_encoder(h2.cpu())
+        h2_l1, h2_l2, h2_l3, h2_l4 = self.h_2_encoder(h2.cpu())
         h2_l1 = h2_l1.to(device)
         h2_l2 = h2_l2.to(device)
         h2_l3 = h2_l3.to(device)
