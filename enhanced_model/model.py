@@ -413,13 +413,13 @@ class Dynamic_attention_model(nn.Module):
         
         self.reconstructed_image = ReconstructionUnit(layer1_channels * 6, layer2_channels * 6, layer3_channels * 6, layer4_channels * 6)
     
-    def forward(self, gamma, underexposed, overexposed, original, h2, histoEQ):
+    def forward(self, gamma, underexposed, overexposed, original, h_2, histoEQ):
 
         gamma_l1, gamma_l2, gamma_l3, gamma_l4 = checkpoint(self.gamma_encoder, gamma, use_reentrant=False)
         underexposed_l1, underexposed_l2, underexposed_l3, underexposed_l4 = checkpoint(self.underexposed_encoder, underexposed, use_reentrant=False)
         overexposed_l1, overexposed_l2, overexposed_l3, overexposed_l4 = checkpoint(self.overexposed_encoder, overexposed, use_reentrant=False)
         original_l1, original_l2, original_l3, original_l4 = checkpoint(self.original_encoder, original, use_reentrant=False)
-        h2_l1, h2_l2, h2_l3, h2_l4 = checkpoint(self.h_2_encoder, h2, use_reentrant=False)
+        h_2_l1, h_2_l2, h_2_l3, h_2_l4 = checkpoint(self.h_2_encoder, h_2, use_reentrant=False)
         histoEQ_l1, histoEQ_l2, histoEQ_l3, histoEQ_l4 = checkpoint(self.histoEQ_encoder, histoEQ, use_reentrant=False)
 
 #        gamma_l1, gamma_l2, gamma_l3, gamma_l4 = self.gamma_encoder(gamma)
