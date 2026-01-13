@@ -419,7 +419,7 @@ class Dynamic_attention_model(nn.Module):
     def setup_cpu_offloading(self):
         """Move some encoders to CPU to save GPU memory"""
         self.original_encoder = self.original_encoder.cpu()
-        self.h2_encoder = self.h2_encoder.cpu()
+        self.h_2_encoder = self.h_2_encoder.cpu()
         self.histoEQ_encoder = self.histoEQ_encoder.cpu()
         print("✓ Moved 3 encoders to CPU to save GPU memory")
 
