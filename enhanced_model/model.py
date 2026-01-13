@@ -425,7 +425,7 @@ class Dynamic_attention_model(nn.Module):
 
 
 
- def forward(self, gamma, underexposed, overexposed, original, h_2, histoEQ):
+    def forward(self, gamma, underexposed, overexposed, original, h_2, histoEQ):
 
         gamma_l1, gamma_l2, gamma_l3, gamma_l4 = checkpoint(self.gamma_encoder, gamma, use_reentrant=False)
         underexposed_l1, underexposed_l2, underexposed_l3, underexposed_l4 = checkpoint(self.underexposed_encoder, underexposed, use_reentrant=False)
