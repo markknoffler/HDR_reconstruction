@@ -347,6 +347,9 @@ class Dynamic_attention_model(nn.Module):
         self.original_encoder = ResNetEncoder()
         self.h_2_encoder = ResNetEncoder()
         self.histoEQ_encoder = ResNetEncoder()
+
+        self.cpu_encoders = [self.original_encoder, self.h2_encoder, self.histoEQ_encoder]
+
         
         self.gamma_dab1 = DAB_block(layer1_channels)
         self.gamma_dab2 = DAB_block(layer2_channels)
@@ -413,6 +416,13 @@ class Dynamic_attention_model(nn.Module):
         
         self.reconstructed_image = ReconstructionUnit(layer1_channels * 6, layer2_channels * 6, layer3_channels * 6, layer4_channels * 6)
     
+    def setup_cpu_offloading(self):
+        """Move some encoders to CPU to save GPU memory"""
+        self.original_encoder = self.original_encoder.cpu()
+        self.h2_encoder = self.h2_encoder.cpu()
+        self.histoEQ_encoder = self.histoEQ_encoder.cpu()
+        print("✓ Moved 3 encoders to CPU to save GPU memory")
+
     def forward(self, gamma, underexposed, overexposed, original, h_2, histoEQ):
 
         gamma_l1, gamma_l2, gamma_l3, gamma_l4 = checkpoint(self.gamma_encoder, gamma, use_reentrant=False)
@@ -428,50 +438,55 @@ class Dynamic_attention_model(nn.Module):
 #        original_l1, original_l2, original_l3, original_l4 = self.original_encoder(original)
 #        h_2_l1, h_2_l2, h_2_l3, h_2_l4 = self.h_2_encoder(h_2)
 #        histoEQ_l1, histoEQ_l2, histoEQ_l3, histoEQ_l4 = self.histoEQ_encoder(histoEQ)
-        
-        gamma_l1 = self.gamma_proj1(torch.cat([gamma_l1, self.gamma_dab1(gamma_l1)], dim=1))
-        gamma_l2 = self.gamma_proj2(torch.cat([gamma_l2, self.gamma_dab2(gamma_l2)], dim=1))
-        gamma_l3 = self.gamma_proj3(torch.cat([gamma_l3, self.gamma_dab3(gamma_l3)], dim=1))
-        gamma_l4 = self.gamma_proj4(torch.cat([gamma_l4, self.gamma_dab4(gamma_l4)], dim=1))
-        
-        underexposed_l1 = self.underexposed_proj1(torch.cat([underexposed_l1, self.underexposed_dab1(underexposed_l1)], dim=1))
-        underexposed_l2 = self.underexposed_proj2(torch.cat([underexposed_l2, self.underexposed_dab2(underexposed_l2)], dim=1))
-        underexposed_l3 = self.underexposed_proj3(torch.cat([underexposed_l3, self.underexposed_dab3(underexposed_l3)], dim=1))
-        underexposed_l4 = self.underexposed_proj4(torch.cat([underexposed_l4, self.underexposed_dab4(underexposed_l4)], dim=1))
-        
-        overexposed_l1 = self.overexposed_proj1(torch.cat([overexposed_l1, self.overexposed_dab1(overexposed_l1)], dim=1))
-        overexposed_l2 = self.overexposed_proj2(torch.cat([overexposed_l2, self.overexposed_dab2(overexposed_l2)], dim=1))
-        overexposed_l3 = self.overexposed_proj3(torch.cat([overexposed_l3, self.overexposed_dab3(overexposed_l3)], dim=1))
-        overexposed_l4 = self.overexposed_proj4(torch.cat([overexposed_l4, self.overexposed_dab4(overexposed_l4)], dim=1))
-        
-        original_l1 = self.original_proj1(torch.cat([original_l1, self.original_dab1(original_l1)], dim=1))
-        original_l2 = self.original_proj2(torch.cat([original_l2, self.original_dab2(original_l2)], dim=1))
-        original_l3 = self.original_proj3(torch.cat([original_l3, self.original_dab3(original_l3)], dim=1))
-        original_l4 = self.original_proj4(torch.cat([original_l4, self.original_dab4(original_l4)], dim=1))
-        
-        h_2_l1 = self.h_2_proj1(torch.cat([h_2_l1, self.h_2_dab1(h_2_l1)], dim=1))
-        h_2_l2 = self.h_2_proj2(torch.cat([h_2_l2, self.h_2_dab2(h_2_l2)], dim=1))
-        h_2_l3 = self.h_2_proj3(torch.cat([h_2_l3, self.h_2_dab3(h_2_l3)], dim=1))
-        h_2_l4 = self.h_2_proj4(torch.cat([h_2_l4, self.h_2_dab4(h_2_l4)], dim=1))
-        
-        histoEQ_l1 = self.histoEQ_proj1(torch.cat([histoEQ_l1, self.histoEQ_dab1(histoEQ_l1)], dim=1))
-        histoEQ_l2 = self.histoEQ_proj2(torch.cat([histoEQ_l2, self.histoEQ_dab2(histoEQ_l2)], dim=1))
-        histoEQ_l3 = self.histoEQ_proj3(torch.cat([histoEQ_l3, self.histoEQ_dab3(histoEQ_l3)], dim=1))
-        histoEQ_l4 = self.histoEQ_proj4(torch.cat([histoEQ_l4, self.histoEQ_dab4(histoEQ_l4)], dim=1))
-        
-        layer1 = torch.cat([gamma_l1, underexposed_l1, overexposed_l1, original_l1, h_2_l1, histoEQ_l1], dim=1)
-        layer2 = torch.cat([gamma_l2, underexposed_l2, overexposed_l2, original_l2, h_2_l2, histoEQ_l2], dim=1)
-        layer3 = torch.cat([gamma_l3, underexposed_l3, overexposed_l3, original_l3, h_2_l3, histoEQ_l3], dim=1)
-        layer4 = torch.cat([gamma_l4, underexposed_l4, overexposed_l4, original_l4, h_2_l4, histoEQ_l4], dim=1)
-        
-        pff1 = self.pff_block_1(layer1, layer2)
-        pff2 = self.pff_block_2(layer1, layer2, layer3)
-        pff3 = self.pff_block_3(layer2, layer3, layer4)
-        #pff4 = self.pff_block_4(layer3, layer4)
-        pff4 = self.pff_block_4(layer4, layer3)
-        
-        output = self.reconstructed_image(pff1, pff2, pff3, pff4)
+        #
 
+        device = gamma.device
+
+        with torch.no_grad():
         
-        return output
+            gamma_l1 = self.gamma_proj1(torch.cat([gamma_l1, self.gamma_dab1(gamma_l1)], dim=1))
+            gamma_l2 = self.gamma_proj2(torch.cat([gamma_l2, self.gamma_dab2(gamma_l2)], dim=1))
+            gamma_l3 = self.gamma_proj3(torch.cat([gamma_l3, self.gamma_dab3(gamma_l3)], dim=1))
+            gamma_l4 = self.gamma_proj4(torch.cat([gamma_l4, self.gamma_dab4(gamma_l4)], dim=1))
+            
+            underexposed_l1 = self.underexposed_proj1(torch.cat([underexposed_l1, self.underexposed_dab1(underexposed_l1)], dim=1))
+            underexposed_l2 = self.underexposed_proj2(torch.cat([underexposed_l2, self.underexposed_dab2(underexposed_l2)], dim=1))
+            underexposed_l3 = self.underexposed_proj3(torch.cat([underexposed_l3, self.underexposed_dab3(underexposed_l3)], dim=1))
+            underexposed_l4 = self.underexposed_proj4(torch.cat([underexposed_l4, self.underexposed_dab4(underexposed_l4)], dim=1))
+            
+            overexposed_l1 = self.overexposed_proj1(torch.cat([overexposed_l1, self.overexposed_dab1(overexposed_l1)], dim=1))
+            overexposed_l2 = self.overexposed_proj2(torch.cat([overexposed_l2, self.overexposed_dab2(overexposed_l2)], dim=1))
+            overexposed_l3 = self.overexposed_proj3(torch.cat([overexposed_l3, self.overexposed_dab3(overexposed_l3)], dim=1))
+            overexposed_l4 = self.overexposed_proj4(torch.cat([overexposed_l4, self.overexposed_dab4(overexposed_l4)], dim=1))
+            
+            original_l1 = self.original_proj1(torch.cat([original_l1, self.original_dab1(original_l1)], dim=1))
+            original_l2 = self.original_proj2(torch.cat([original_l2, self.original_dab2(original_l2)], dim=1))
+            original_l3 = self.original_proj3(torch.cat([original_l3, self.original_dab3(original_l3)], dim=1))
+            original_l4 = self.original_proj4(torch.cat([original_l4, self.original_dab4(original_l4)], dim=1))
+            
+            h_2_l1 = self.h_2_proj1(torch.cat([h_2_l1, self.h_2_dab1(h_2_l1)], dim=1))
+            h_2_l2 = self.h_2_proj2(torch.cat([h_2_l2, self.h_2_dab2(h_2_l2)], dim=1))
+            h_2_l3 = self.h_2_proj3(torch.cat([h_2_l3, self.h_2_dab3(h_2_l3)], dim=1))
+            h_2_l4 = self.h_2_proj4(torch.cat([h_2_l4, self.h_2_dab4(h_2_l4)], dim=1))
+            
+            histoEQ_l1 = self.histoEQ_proj1(torch.cat([histoEQ_l1, self.histoEQ_dab1(histoEQ_l1)], dim=1))
+            histoEQ_l2 = self.histoEQ_proj2(torch.cat([histoEQ_l2, self.histoEQ_dab2(histoEQ_l2)], dim=1))
+            histoEQ_l3 = self.histoEQ_proj3(torch.cat([histoEQ_l3, self.histoEQ_dab3(histoEQ_l3)], dim=1))
+            histoEQ_l4 = self.histoEQ_proj4(torch.cat([histoEQ_l4, self.histoEQ_dab4(histoEQ_l4)], dim=1))
+            
+            layer1 = torch.cat([gamma_l1, underexposed_l1, overexposed_l1, original_l1, h_2_l1, histoEQ_l1], dim=1)
+            layer2 = torch.cat([gamma_l2, underexposed_l2, overexposed_l2, original_l2, h_2_l2, histoEQ_l2], dim=1)
+            layer3 = torch.cat([gamma_l3, underexposed_l3, overexposed_l3, original_l3, h_2_l3, histoEQ_l3], dim=1)
+            layer4 = torch.cat([gamma_l4, underexposed_l4, overexposed_l4, original_l4, h_2_l4, histoEQ_l4], dim=1)
+            
+            pff1 = self.pff_block_1(layer1, layer2)
+            pff2 = self.pff_block_2(layer1, layer2, layer3)
+            pff3 = self.pff_block_3(layer2, layer3, layer4)
+            #pff4 = self.pff_block_4(layer3, layer4)
+            pff4 = self.pff_block_4(layer4, layer3)
+            
+            output = self.reconstructed_image(pff1, pff2, pff3, pff4)
+
+            
+            return output
 

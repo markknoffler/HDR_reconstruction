@@ -537,6 +537,7 @@ def main():
     # ========================================
     model = Dynamic_attention_model(256, 512, 1024, 2048)
     model = model.to(device)
+    model.setup_cpu_offloading()
 
     if len(opt.gpu_ids) > 1:
         model = torch.nn.DataParallel(model, device_ids=opt.gpu_ids)
