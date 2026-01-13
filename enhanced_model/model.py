@@ -419,13 +419,13 @@ class Dynamic_attention_model(nn.Module):
         underexposed_l1, underexposed_l2, underexposed_l3, underexposed_l4 = checkpoint(self.underexposed_encoder, underexposed, use_reentrant=False)
         overexposed_l1, overexposed_l2, overexposed_l3, overexposed_l4 = checkpoint(self.overexposed_encoder, overexposed, use_reentrant=False)
         original_l1, original_l2, original_l3, original_l4 = checkpoint(self.original_encoder, original, use_reentrant=False)
-        h2_l1, h2_l2, h2_l3, h2_l4 = checkpoint(self.h2_encoder, h2, use_reentrant=False)
+        h2_l1, h2_l2, h2_l3, h2_l4 = checkpoint(self.h_2_encoder, h2, use_reentrant=False)
         histoEQ_l1, histoEQ_l2, histoEQ_l3, histoEQ_l4 = checkpoint(self.histoEQ_encoder, histoEQ, use_reentrant=False)
 
 #        gamma_l1, gamma_l2, gamma_l3, gamma_l4 = self.gamma_encoder(gamma)
 #        underexposed_l1, underexposed_l2, underexposed_l3, underexposed_l4 = self.underexposed_encoder(underexposed)
 #        overexposed_l1, overexposed_l2, overexposed_l3, overexposed_l4 = self.overexposed_encoder(overexposed)
-        #        original_l1, original_l2, original_l3, original_l4 = self.original_encoder(original)
+#        original_l1, original_l2, original_l3, original_l4 = self.original_encoder(original)
 #        h_2_l1, h_2_l2, h_2_l3, h_2_l4 = self.h_2_encoder(h_2)
 #        histoEQ_l1, histoEQ_l2, histoEQ_l3, histoEQ_l4 = self.histoEQ_encoder(histoEQ)
         
