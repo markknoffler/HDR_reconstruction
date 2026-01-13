@@ -337,7 +337,7 @@ class ReconstructionUnit(nn.Module):
 
 
 class Dynamic_attention_model(nn.Module):
- def __init__(self, layer1_channels, layer2_channels, layer3_channels, layer4_channels):
+    def __init__(self, layer1_channels, layer2_channels, layer3_channels, layer4_channels):
         super().__init__()
         
         self.gamma_encoder = ResNetEncoder()
