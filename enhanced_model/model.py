@@ -456,7 +456,8 @@ class Dynamic_attention_model(nn.Module):
         pff1 = self.pff_block_1(layer1, layer2)
         pff2 = self.pff_block_2(layer1, layer2, layer3)
         pff3 = self.pff_block_3(layer2, layer3, layer4)
-        pff4 = self.pff_block_4(layer3, layer4)
+        #pff4 = self.pff_block_4(layer3, layer4)
+        pff4 = self.pff_block_4(layer4, layer3)
         
         output = self.reconstructed_image(pff1, pff2, pff3, pff4)
 
