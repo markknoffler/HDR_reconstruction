@@ -424,7 +424,7 @@ class Dynamic_attention_model(nn.Module):
         print("✓ Moved 3 encoders to CPU to save GPU memory")
 
 
-    def forward(self, gamma, underexposed, overexposed, original, h2, histoEQ):
+    def forward(self, gamma, underexposed, overexposed, original, h_2, histoEQ):
         device = gamma.device  # Remember the GPU device
         
         # GPU encoders with checkpointing (saves memory)
@@ -439,11 +439,11 @@ class Dynamic_attention_model(nn.Module):
         original_l3 = original_l3.to(device)
         original_l4 = original_l4.to(device)
         
-        h2_l1, h2_l2, h2_l3, h2_l4 = self.h_2_encoder(h2.cpu())
-        h2_l1 = h2_l1.to(device)
-        h2_l2 = h2_l2.to(device)
-        h2_l3 = h2_l3.to(device)
-        h2_l4 = h2_l4.to(device)
+        h_2_l1, h_2_l2, h_2_l3, h_2_l4 = self.h_2_encoder(h_2.cpu())
+        h_2_l1 = h_2_l1.to(device)
+        h_2_l2 = h_2_l2.to(device)
+        h_2_l3 = h_2_l3.to(device)
+        h_2_l4 = h_2_l4.to(device)
         
         histoEQ_l1, histoEQ_l2, histoEQ_l3, histoEQ_l4 = self.histoEQ_encoder(histoEQ.cpu())
         histoEQ_l1 = histoEQ_l1.to(device)
@@ -475,11 +475,11 @@ class Dynamic_attention_model(nn.Module):
         original_l3 = self.original_proj3(torch.cat([original_l3, self.original_dab3(original_l3)], dim=1))
         original_l4 = self.original_proj4(torch.cat([original_l4, self.original_dab4(original_l4)], dim=1))
         
-        # Apply DAB blocks and projections for h2
-        h2_l1 = self.h_2_proj1(torch.cat([h2_l1, self.h2_dab1(h2_l1)], dim=1))
-        h2_l2 = self.h_2_proj2(torch.cat([h2_l2, self.h2_dab2(h2_l2)], dim=1))
-        h2_l3 = self.h_2_proj3(torch.cat([h2_l3, self.h2_dab3(h2_l3)], dim=1))
-        h2_l4 = self.h_2_proj4(torch.cat([h2_l4, self.h2_dab4(h2_l4)], dim=1))
+        # Apply DAB blocks and projections for h_2
+        h_2_l1 = self.h_2_proj1(torch.cat([h_2_l1, self.h_2_dab1(h_2_l1)], dim=1))
+        h_2_l2 = self.h_2_proj2(torch.cat([h_2_l2, self.h_2_dab2(h_2_l2)], dim=1))
+        h_2_l3 = self.h_2_proj3(torch.cat([h_2_l3, self.h_2_dab3(h_2_l3)], dim=1))
+        h_2_l4 = self.h_2_proj4(torch.cat([h_2_l4, self.h_2_dab4(h_2_l4)], dim=1))
         
         # Apply DAB blocks and projections for histoEQ
         histoEQ_l1 = self.histoEQ_proj1(torch.cat([histoEQ_l1, self.histoEQ_dab1(histoEQ_l1)], dim=1))
@@ -488,10 +488,10 @@ class Dynamic_attention_model(nn.Module):
         histoEQ_l4 = self.histoEQ_proj4(torch.cat([histoEQ_l4, self.histoEQ_dab4(histoEQ_l4)], dim=1))
         
         # Concatenate all features
-        layer1 = torch.cat([gamma_l1, underexposed_l1, overexposed_l1, original_l1, h2_l1, histoEQ_l1], dim=1)
-        layer2 = torch.cat([gamma_l2, underexposed_l2, overexposed_l2, original_l2, h2_l2, histoEQ_l2], dim=1)
-        layer3 = torch.cat([gamma_l3, underexposed_l3, overexposed_l3, original_l3, h2_l3, histoEQ_l3], dim=1)
-        layer4 = torch.cat([gamma_l4, underexposed_l4, overexposed_l4, original_l4, h2_l4, histoEQ_l4], dim=1)
+        layer1 = torch.cat([gamma_l1, underexposed_l1, overexposed_l1, original_l1, h_2_l1, histoEQ_l1], dim=1)
+        layer2 = torch.cat([gamma_l2, underexposed_l2, overexposed_l2, original_l2, h_2_l2, histoEQ_l2], dim=1)
+        layer3 = torch.cat([gamma_l3, underexposed_l3, overexposed_l3, original_l3, h_2_l3, histoEQ_l3], dim=1)
+        layer4 = torch.cat([gamma_l4, underexposed_l4, overexposed_l4, original_l4, h_2_l4, histoEQ_l4], dim=1)
         
         # Apply PFF blocks
         pff1 = self.pff_block_1(layer1, layer2)
