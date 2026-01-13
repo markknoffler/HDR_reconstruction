@@ -25,6 +25,7 @@ from util import (
     save_ldr_image,
     update_lr,
 )
+from torch.cuda.amp import autocast, GradScaler
 
 from data_loader import HDRDataset
 from image_transforms import LDRTransforms
@@ -336,8 +337,12 @@ def sanity_check(model, criterion, optimizer, train_loader, val_loader, device, 
     original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
     
     # Forward pass with 6 inputs
-    outputs = model(gamma, underexposed, overexposed, original, clahe, hist_eq)
-    loss_out = criterion(outputs, ground_truth)
+    with autocast():
+        outputs = model(gamma, underexposed, overexposed, original, clahe, hist_eq)
+        loss_out = criterion(outputs, ground_truth)
+
+    #outputs = model(gamma, underexposed, overexposed, original, clahe, hist_eq)
+    #loss_out = criterion(outputs, ground_truth)
     loss = unwrap_loss(loss_out)
 
     optimizer.zero_grad(set_to_none=True)
@@ -541,6 +546,7 @@ def main():
     # ========================================
     criterion = EnhancedModelLoss().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(0.9, 0.999))
+    scaler = GradScaler()
     
     # ========================================
     # Load checkpoint if continuing training
@@ -627,6 +633,11 @@ def main():
             
             # Backward pass and optimize
             optimizer.step()
+
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+
             num_batches += 1
             
             # Log batch information
