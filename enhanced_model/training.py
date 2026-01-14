@@ -549,7 +549,8 @@ def main():
     )
     
     # Loss function (no .to(device) needed)
-    criterion = EnhancedModelLoss()
+    #criterion = EnhancedModelLoss()
+    criterion = EnhancedModelLoss().cuda().half()
     
     # ========================================
     # Load checkpoint if continuing training
