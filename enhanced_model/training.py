@@ -546,9 +546,8 @@ def main():
     # ========================================
     model_engine, optimizer, _, _ = deepspeed.initialize(
         model=model,
-        optimizer=optimizer,
         model_parameters=model.parameters(),
-        config='ds_config.json'  # DeepSpeed config file
+        config='ds_config.json'
     )
     
     # Loss function (no .to(device) needed)

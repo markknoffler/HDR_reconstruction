@@ -16,6 +16,15 @@
             "pin_memory": true
         }
     },
+    "optimizer": {
+        "type": "Adam",
+        "params": {
+            "lr": 0.0001,
+            "betas": [0.9, 0.999],
+            "eps": 1e-8,
+            "weight_decay": 0
+        }
+    },
     "gradient_clipping": 1.0,
     "steps_per_print": 100,
     "wall_clock_breakdown": false
