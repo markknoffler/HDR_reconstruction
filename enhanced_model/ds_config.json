@@ -10,20 +10,9 @@
         "min_loss_scale": 1
     },
     "zero_optimization": {
-        "stage": 3,
-        "offload_optimizer": {
-            "device": "cpu",
-            "pin_memory": true
-        },
-        "offload_param": {
-            "device": "cpu",
-            "pin_memory": true
-        },
-        "contiguous_gradients": true,
-        "stage3_gather_16bit_weights_on_model_save": true
+        "stage": 2
     },
     "gradient_clipping": 1.0,
-    "steps_per_print": 500,
+    "steps_per_print": 100,
     "wall_clock_breakdown": false
 }
-
