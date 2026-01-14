@@ -539,11 +539,14 @@ def main():
     model = Dynamic_attention_model(256, 512, 1024, 2048)
     # DON'T call .to(device) - DeepSpeed handles it!
     
+    optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr)
+    
     # ========================================
     # *** DEEPSPEED CHANGE: Initialize DeepSpeed ***
     # ========================================
     model_engine, optimizer, _, _ = deepspeed.initialize(
         model=model,
+        optimizer=optimizer,
         model_parameters=model.parameters(),
         config='ds_config.json'  # DeepSpeed config file
     )
