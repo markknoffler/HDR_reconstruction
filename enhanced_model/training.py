@@ -25,7 +25,8 @@ from util import (
     save_ldr_image,
     update_lr,
 )
-from torch.cuda.amp import autocast, GradScaler
+import deepspeed
+
 
 from data_loader import HDRDataset
 from image_transforms import LDRTransforms
@@ -474,7 +475,7 @@ def validate_model(model, val_loader, device, epoch, hdrvdp_calculator, save_sam
     avg_hdrvdp3 = total_hdrvdp3 / num_samples if num_samples > 0 else 0
     model.train()
     return avg_psnr, avg_ssim, avg_hdrvdp2, avg_hdrvdp3
-    
+
 def main():
     # Initialize options
     opt = Options().parse()
@@ -489,12 +490,9 @@ def main():
     make_required_directories(mode="train")
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
     os.makedirs("./validation_results", exist_ok=True)
-
+    
     # Initialize HDR-VDP calculator
     hdrvdp_calculator = HDRVDPMetrics(use_real_hdrvdp=False)
-    print("Using HDR-VDP proxy metrics (fast, no dependencies)")
-    print("To use real metrics: install 'pip install pyhdr-vdp' and set use_real_hdrvdp=True\n")
-
     
     # ======================================
     # Load and split dataset
@@ -502,7 +500,6 @@ def main():
     print("Loading dataset...")
     full_dataset = HDRDataset(LDR_DIR, HDR_DIR, mode="train")
     
-    # Split into train and validation (80-20)
     train_size = int(0.8 * len(full_dataset))
     val_size = len(full_dataset) - train_size
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
@@ -512,42 +509,25 @@ def main():
     
     train_loader = DataLoader(train_dataset, batch_size=opt.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=opt.batch_size, shuffle=False)
-
+    
     # ========================================
-    # GPU configuration
-    #========================================
-    str_ids = opt.gpu_ids.split(",")
-    opt.gpu_ids = []
-    for str_id in str_ids:
-        id = int(str_id)
-        if id >= 0:
-            opt.gpu_ids.append(id)
-
-    device = torch.device("cpu")
-    if len(opt.gpu_ids) > 0:
-        assert torch.cuda.is_available()
-        assert torch.cuda.device_count() >= len(opt.gpu_ids)
-        torch.cuda.set_device(opt.gpu_ids[0])
-        device = torch.device(f"cuda:{opt.gpu_ids[0]}")
-
-    print(f"Using device: {device}")
-
-    # ========================================
-    # Model initialization
+    # *** DEEPSPEED CHANGE: Model initialization ***
+    # REMOVE ALL THE OLD GPU CONFIGURATION CODE
     # ========================================
     model = Dynamic_attention_model(256, 512, 1024, 2048)
-    model = model.to(device)
-    #model.setup_cpu_offloading()
-
-    if len(opt.gpu_ids) > 1:
-        model = torch.nn.DataParallel(model, device_ids=opt.gpu_ids)
-
+    # DON'T call .to(device) - DeepSpeed handles it!
+    
     # ========================================
-    # Loss and optimizer
+    # *** DEEPSPEED CHANGE: Initialize DeepSpeed ***
     # ========================================
-    criterion = EnhancedModelLoss().to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr, betas=(0.9, 0.999))
-    scaler = GradScaler()
+    model_engine, optimizer, _, _ = deepspeed.initialize(
+        model=model,
+        model_parameters=model.parameters(),
+        config='ds_config.json'  # DeepSpeed config file
+    )
+    
+    # Loss function (no .to(device) needed)
+    criterion = EnhancedModelLoss()
     
     # ========================================
     # Load checkpoint if continuing training
@@ -560,32 +540,24 @@ def main():
     
     if opt.continue_train:
         try:
-            start_epoch, model = load_checkpoint(model, opt.ckpt_path)
-            print(f"Resuming training from epoch {start_epoch}")
-            
-            # Try to load best metrics from CSV if exists
-            if os.path.exists(CSV_FILE):
-                with open(CSV_FILE, 'r') as f:
-                    reader = csv.DictReader(f)
-                    rows = list(reader)
-                    if rows:
-                        last_row = rows[-1]
-                        best_val_psnr = float(last_row['val_psnr'])
-                        best_val_ssim = float(last_row['val_ssim'])
-                        best_val_hdrvdp = float(last_row['val_hdrvdp'])
+            # DeepSpeed checkpoint loading
+            _, client_state = model_engine.load_checkpoint(CHECKPOINT_DIR)
+            if client_state:
+                start_epoch = client_state['epoch'] + 1
+                best_val_psnr = client_state.get('best_val_psnr', 0)
+                best_val_ssim = client_state.get('best_val_ssim', 0)
+                best_val_hdrvdp2 = client_state.get('best_val_hdrvdp2', 0)
+                best_val_hdrvdp3 = client_state.get('best_val_hdrvdp3', 0)
+                print(f"Resuming training from epoch {start_epoch}")
         except Exception as e:
-            print(e)
-            print("Checkpoint not found! Training from scratch.")
+            print(f"Checkpoint not found: {e}. Training from scratch.")
             start_epoch = 1
-
-
-    #sanity_check(model, criterion, optimizer, train_loader, val_loader, device, hdrvdp_calculator)
-
     
     # ========================================
     # Training loop
     # ========================================
-    print("\nStarting training...")
+    print("\nStarting training with DeepSpeed ZeRO-3...")
+    print(f"Model will be automatically sharded across {torch.cuda.device_count()} GPUs + CPU offloading")
     
     for epoch in range(start_epoch, opt.epochs + 1):
         epoch_start = time.time()
@@ -594,12 +566,14 @@ def main():
         
         # Check whether LR needs to be updated
         if epoch > opt.lr_decay_after:
-            update_lr(optimizer, epoch, opt)
+            for param_group in optimizer.param_groups:
+                lr_scale = 1.0 - max(0, epoch - opt.lr_decay_after) / (opt.epochs - opt.lr_decay_after)
+                param_group['lr'] = opt.lr * lr_scale
         
         print(f"\nEpoch: {epoch}/{opt.epochs}")
         
         # Training phase
-        model.train()
+        model_engine.train()
         ldr_transformer = LDRTransforms(
             gamma_value=2.2,
             underexposed_ev=-2.0,
@@ -607,57 +581,35 @@ def main():
             clahe_clip_limit=2.0,
             clahe_tile_size=8
         )
-
+        
         for batch_idx, data in enumerate(tqdm(train_loader, desc="Training")):
-            optimizer.zero_grad()
-
-            input_ldr = data["ldr_image"].to(device)
-            ground_truth = data["hdr_image"].to(device)
-            original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
-
+            # *** DEEPSPEED CHANGE: Data to GPU ***
+            input_ldr = data["ldr_image"].cuda()
+            ground_truth = data["hdr_image"].cuda()
             
-            # Forward pass
-            outputs = model(gamma, underexposed, overexposed, original, clahe, hist_eq)
+            # Apply transformations
+            original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
+            
+            # *** DEEPSPEED CHANGE: Forward pass (NO autocast!) ***
+            # DeepSpeed automatically uses FP16
+            outputs = model_engine(gamma, underexposed, overexposed, original, clahe, hist_eq)
             
             # Calculate loss
-#            loss_out = criterion(outputs, ground_truth)
-#
-#            if isinstance(loss_out, (tuple, list)):
-#                loss = loss_out[0]          # total loss
-#            elif isinstance(loss_out, dict):
-#                loss = loss_out["loss"]     # or whatever key your loss uses
-#            else:
-#                loss = loss_out
-#
-#            running_loss += loss.item()
-#            loss.backward()
-#            
-#            # Backward pass and optimize
-#            optimizer.step()
-#
-#            scaler.scale(loss).backward()
-#            scaler.step(optimizer)
-#            scaler.update()
-
-            # Forward pass with autocast
-            with autocast():
-                outputs = model(gamma, underexposed, overexposed, original, clahe, hist_eq)
-                loss_out = criterion(outputs, ground_truth)
-                if isinstance(loss_out, (tuple, list)):
-                    loss = loss_out[0]
-                elif isinstance(loss_out, dict):
-                    loss = loss_out["loss"]
-                else:
-                    loss = loss_out
-
+            loss_out = criterion(outputs, ground_truth)
+            
+            if isinstance(loss_out, (tuple, list)):
+                loss = loss_out[0]
+            elif isinstance(loss_out, dict):
+                loss = loss_out["loss"]
+            else:
+                loss = loss_out
+            
             running_loss += loss.item()
-
-# Backward pass with scaler
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
-
-
+            
+            # *** DEEPSPEED CHANGE: Backward pass ***
+            model_engine.backward(loss)
+            model_engine.step()
+            
             num_batches += 1
             
             # Log batch information
@@ -667,11 +619,12 @@ def main():
         
         # Calculate average training loss for the epoch
         avg_train_loss = running_loss / num_batches if num_batches > 0 else 0
+        epoch_time = time.time() - epoch_start
         
         # Validation phase
         print("Validating...")
         val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3 = validate_model(
-            model, val_loader, device, epoch, hdrvdp_calculator,
+            model_engine, val_loader, torch.device('cuda:0'), epoch, hdrvdp_calculator,
             save_samples=(epoch % opt.save_ckpt_after == 0 or epoch == 1)
         )
         
@@ -679,77 +632,50 @@ def main():
         save_metrics_to_csv(CSV_FILE, epoch, avg_train_loss, val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3)
         
         # Print epoch results
-
         print(f"\n{'='*60}")
         print(f"Epoch {epoch}/{opt.epochs} Summary")
         print(f"{'='*60}")
-        print(f"  Training Loss   : {avg_train_loss:.6f}")
-        print(f"  Validation PSNR : {val_psnr:.4f} dB")
-        print(f"  Validation SSIM : {val_ssim:.4f}")
-        print(f"  HDR-VDP-2 Score : {val_hdrvdp2:.4f}")
-        print(f"  HDR-VDP-3 Score : {val_hdrvdp3:.4f}")
-        print(f"  Epoch Time      : {epoch_time:.2f} seconds")
+        print(f"  Training Loss    : {avg_train_loss:.6f}")
+        print(f"  Validation PSNR  : {val_psnr:.4f} dB")
+        print(f"  Validation SSIM  : {val_ssim:.4f}")
+        print(f"  HDR-VDP-2 Score  : {val_hdrvdp2:.4f}")
+        print(f"  HDR-VDP-3 Score  : {val_hdrvdp3:.4f}")
+        print(f"  Epoch Time       : {epoch_time:.2f} seconds")
         print(f"{'='*60}")
         
-        # Save checkpoint based on best PSNR
+        # *** DEEPSPEED CHANGE: Save checkpoint ***
+        client_state = {
+            'epoch': epoch,
+            'best_val_psnr': best_val_psnr,
+            'best_val_ssim': best_val_ssim,
+            'best_val_hdrvdp2': best_val_hdrvdp2,
+            'best_val_hdrvdp3': best_val_hdrvdp3,
+            'avg_train_loss': avg_train_loss,
+            'val_psnr': val_psnr,
+            'val_ssim': val_ssim
+        }
+        
         if val_psnr > best_val_psnr:
             best_val_psnr = val_psnr
             best_val_ssim = val_ssim
             best_val_hdrvdp2 = val_hdrvdp2
             best_val_hdrvdp3 = val_hdrvdp3
-
+            
             # Save best model
-            checkpoint_path = os.path.join(CHECKPOINT_DIR, f"best_model_epoch_{epoch}.pth")
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'val_psnr': val_psnr,
-                'val_ssim': val_ssim,
-                'val_hdrvdp': val_hdrvdp,
-                'loss': avg_train_loss,
-            }, checkpoint_path)
-            
-            # Also update latest checkpoint
-            latest_path = os.path.join(CHECKPOINT_DIR, "latest.pth")
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'val_psnr': val_psnr,
-                'val_ssim': val_ssim,
-                'val_hdrvdp2': val_hdrvdp2,
-                'val_hdrvdp3': val_hdrvdp3,
-                'loss': avg_train_loss,
-            }, latest_path)
-            
-            print(f"  Saved best model with PSNR: {val_psnr:.4f}")
+            model_engine.save_checkpoint(CHECKPOINT_DIR, tag=f'best_epoch_{epoch}', client_state=client_state)
+            print(f"  ✓ Saved best model with PSNR: {val_psnr:.4f}")
         
-        # Save regular checkpoint every save_ckpt_after epochs
+        # Save regular checkpoint
         if epoch % opt.save_ckpt_after == 0:
-            checkpoint_path = os.path.join(CHECKPOINT_DIR, f"checkpoint_epoch_{epoch}.pth")
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'val_psnr': val_psnr,
-                'val_ssim': val_ssim,
-                'val_hdrvdp': val_hdrvdp,
-                'loss': avg_train_loss,
-            }, checkpoint_path)
-            print(f"  Saved checkpoint at epoch {epoch}")
+            model_engine.save_checkpoint(CHECKPOINT_DIR, tag=f'epoch_{epoch}', client_state=client_state)
+            print(f"  ✓ Saved checkpoint at epoch {epoch}")
     
     print("\n" + "="*60)
     print("TRAINING COMPLETED!")
     print("="*60)
-    print(f"  Best PSNR        : {best_val_psnr:.4f} dB")
-    print(f"  Best SSIM        : {best_val_ssim:.4f}")
-    print(f"  Best HDR-VDP-2   : {best_val_hdrvdp2:.4f}")
-    print(f"  Best HDR-VDP-3   : {best_val_hdrvdp3:.4f}")
+    print(f"  Best PSNR     : {best_val_psnr:.4f} dB")
+    print(f"  Best SSIM     : {best_val_ssim:.4f}")
+    print(f"  Best HDR-VDP-2: {best_val_hdrvdp2:.4f}")
+    print(f"  Best HDR-VDP-3: {best_val_hdrvdp3:.4f}")
     print("="*60)
-
-
-
-if __name__ == "__main__":
-    main()
-
+    
