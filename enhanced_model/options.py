@@ -40,6 +40,13 @@ class Options:
         )
 
         self.parser.add_argument(
+            "--local_rank",
+            type=int,
+            default=-1,
+            help="local rank for distributed training (added by DeepSpeed)"
+        )
+
+        self.parser.add_argument(
             "--iter",
             type=int,
             default="1",
