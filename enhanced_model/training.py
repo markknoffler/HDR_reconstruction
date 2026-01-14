@@ -341,11 +341,18 @@ def sanity_check(model, criterion, optimizer, train_loader, val_loader, device, 
     
     # Apply transformations
     original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
+
+    original = original.half()
+    gamma = gamma.half()
+    underexposed = underexposed.half()
+    overexposed = overexposed.half()
+    hist_eq = hist_eq.half()
+    clahe = clahe.half()
     
     # Forward pass with 6 inputs
-    with autocast():
-        outputs = model(gamma, underexposed, overexposed, original, clahe, hist_eq)
-        loss_out = criterion(outputs, ground_truth)
+    #with autocast():
+    outputs = model(gamma, underexposed, overexposed, original, clahe, hist_eq)
+    loss_out = criterion(outputs, ground_truth)
 
     #outputs = model(gamma, underexposed, overexposed, original, clahe, hist_eq)
     #loss_out = criterion(outputs, ground_truth)
@@ -423,6 +430,13 @@ def validate_model(model, val_loader, device, epoch, hdrvdp_calculator, save_sam
             
             # Apply transformations
             original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
+
+            original = original.half()
+            gamma = gamma.half()
+            underexposed = underexposed.half()
+            overexposed = overexposed.half()
+            hist_eq = hist_eq.half()
+            clahe = clahe.half()
             
             # Forward pass with 6 inputs
             outputs = model(gamma, underexposed, overexposed, original, clahe, hist_eq)
@@ -601,7 +615,14 @@ def main():
             
             # Apply transformations
             original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
-            
+
+            original = original.half()
+            gamma = gamma.half()
+            underexposed = underexposed.half()
+            overexposed = overexposed.half()
+            hist_eq = hist_eq.half()
+            clahe = clahe.half()
+
             # *** DEEPSPEED CHANGE: Forward pass (NO autocast!) ***
             # DeepSpeed automatically uses FP16
             outputs = model_engine(gamma, underexposed, overexposed, original, clahe, hist_eq)
