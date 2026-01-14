@@ -331,8 +331,13 @@ def sanity_check(model, criterion, optimizer, train_loader, val_loader, device, 
     # ---- one TRAIN step ----
     model.train()
     data = next(iter(train_loader))
-    input_ldr = data["ldr_image"].to(device)
-    ground_truth = data["hdr_image"].to(device)
+    #input_ldr = data["ldr_image"].to(device)
+    #ground_truth = data["hdr_image"].to(device)
+
+    # *** DEEPSPEED CHANGE: Data to GPU and FP16 ***
+    input_ldr = data["ldr_image"].cuda().half()  # Add .half()
+    ground_truth = data["hdr_image"].cuda().half()  # Add .half()
+
     
     # Apply transformations
     original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
@@ -410,8 +415,11 @@ def validate_model(model, val_loader, device, epoch, hdrvdp_calculator, save_sam
     
     with torch.no_grad():
         for batch_idx, data in enumerate(tqdm(val_loader, desc="Validation")):
-            input_ldr = data["ldr_image"].to(device)
-            ground_truth = data["hdr_image"].to(device)
+            #input_ldr = data["ldr_image"].to(device)
+            #ground_truth = data["hdr_image"].to(device)
+
+            input_ldr = data["ldr_image"].cuda().half()  # Add .cuda().half()
+            ground_truth = data["hdr_image"].cuda().half()  # Add .cuda().half()
             
             # Apply transformations
             original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
@@ -584,8 +592,12 @@ def main():
         
         for batch_idx, data in enumerate(tqdm(train_loader, desc="Training")):
             # *** DEEPSPEED CHANGE: Data to GPU ***
-            input_ldr = data["ldr_image"].cuda()
-            ground_truth = data["hdr_image"].cuda()
+            #input_ldr = data["ldr_image"].cuda()
+            #ground_truth = data["hdr_image"].cuda()
+
+            input_ldr = data["ldr_image"].cuda().half()  # Add .cuda().half()
+            ground_truth = data["hdr_image"].cuda().half()  # Add .cuda().half()
+
             
             # Apply transformations
             original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
