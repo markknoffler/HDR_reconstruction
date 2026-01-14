@@ -553,7 +553,8 @@ def main():
     
     # Loss function (no .to(device) needed)
     #criterion = EnhancedModelLoss()
-    criterion = EnhancedModelLoss().cuda().half()
+    #criterion = EnhancedModelLoss().cuda().half()
+    criterion = EnhancedModelLoss()
     
     # ========================================
     # Load checkpoint if continuing training
@@ -632,7 +633,8 @@ def main():
             outputs = model_engine(gamma, underexposed, overexposed, original, clahe, hist_eq)
             
             # Calculate loss
-            loss_out = criterion(outputs, ground_truth)
+            #loss_out = criterion(outputs, ground_truth)
+            loss_out = criterion(outputs.cpu(), ground_truth.cpu())
             
             if isinstance(loss_out, (tuple, list)):
                 loss = loss_out[0]
