@@ -678,4 +678,6 @@ def main():
     print(f"  Best HDR-VDP-2: {best_val_hdrvdp2:.4f}")
     print(f"  Best HDR-VDP-3: {best_val_hdrvdp3:.4f}")
     print("="*60)
-    
+
+if __name__ == "__main__":
+    main()
