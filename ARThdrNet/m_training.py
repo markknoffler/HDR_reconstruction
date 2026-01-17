@@ -639,8 +639,10 @@ def main():
             # *** DEEPSPEED CHANGE: Forward pass (NO autocast!) ***
             # DeepSpeed automatically uses FP16
             #outputs = model_engine(gamma, underexposed, overexposed, original, clahe, hist_eq)
+
             
             # Calculate loss
+            outputs = model(input_ldr)
             loss_out = criterion(outputs, ground_truth)
             #loss_out = criterion(outputs.cpu(), ground_truth.cpu())
             
