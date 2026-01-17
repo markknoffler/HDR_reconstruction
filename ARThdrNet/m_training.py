@@ -562,7 +562,7 @@ def main():
 
     
     #criterion = EnhancedModelLoss()
-    criterion = ArtHDRLoss(lambda1=0.1, lambda2=0.5, mu=5000).to(device)
+    criterion = ArtHDRLoss(lambda1=0.1, lambda2=0.5, mu=5000)
     
     # ========================================
     # Load checkpoint if continuing training
