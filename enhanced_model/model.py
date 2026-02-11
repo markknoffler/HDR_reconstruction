@@ -414,7 +414,7 @@ class Dynamic_attention_model(nn.Module):
         self.pff_block_4 = PFF_block_next(layer4_channels * 3, layer3_channels * 3)
 
         
-        self.reconstructed_image = ReconstructionUnit(layer1_channels * 6, layer2_channels * 6, layer3_channels * 6, layer4_channels * 6)
+        self.reconstructed_image = ReconstructionUnit(layer1_channels * 3, layer2_channels * 3, layer3_channels * 3, layer4_channels * 3)
     
 #    def setup_cpu_offloading(self):
 #        """Move some encoders to CPU to save GPU memory"""
