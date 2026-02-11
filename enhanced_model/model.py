@@ -405,13 +405,13 @@ class Dynamic_attention_model(nn.Module):
 #        self.histoEQ_proj3 = nn.Conv2d(layer3_channels * 2, layer3_channels, kernel_size=1)
 #        self.histoEQ_proj4 = nn.Conv2d(layer4_channels * 2, layer4_channels, kernel_size=1)
         
-        self.pff_block_1 = PFF_block_pre(layer1_channels * 6, layer2_channels * 6)
+        self.pff_block_1 = PFF_block_pre(layer1_channels * 3, layer2_channels * 3)
         #self.pff_block_2 = PFF_block_3(layer1_channels * 6, layer2_channels * 6, layer3_channels * 6)
         #self.pff_block_3 = PFF_block_3(layer2_channels * 6, layer3_channels * 6, layer4_channels * 6)
-        self.pff_block_2 = PFF_block_3(layer1_channels * 6, layer2_channels * 6, layer3_channels * 6, DAB_block)
-        self.pff_block_3 = PFF_block_3(layer2_channels * 6, layer3_channels * 6, layer4_channels * 6, DAB_block)
+        self.pff_block_2 = PFF_block_3(layer1_channels * 3, layer2_channels * 3, layer3_channels * 3, DAB_block)
+        self.pff_block_3 = PFF_block_3(layer2_channels * 3, layer3_channels * 3, layer4_channels * 3, DAB_block)
         #self.pff_block_4 = PFF_block_next(layer3_channels * 6, layer4_channels * 6)
-        self.pff_block_4 = PFF_block_next(layer4_channels * 6, layer3_channels * 6)
+        self.pff_block_4 = PFF_block_next(layer4_channels * 3, layer3_channels * 3)
 
         
         self.reconstructed_image = ReconstructionUnit(layer1_channels * 6, layer2_channels * 6, layer3_channels * 6, layer4_channels * 6)
