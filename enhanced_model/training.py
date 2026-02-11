@@ -712,7 +712,8 @@ def main():
             # Log batch information
             if (batch_idx + 1) % opt.log_after == 0:
                 avg_loss = running_loss / num_batches
-                print(f"  Batch: {batch_idx + 1}; Training loss: {avg_loss:.6f}")
+                #print(f"  Batch: {batch_idx + 1}; Training loss: {avg_loss:.6f}")
+                tqdm.write(f"  Batch: {batch_idx + 1}; Training loss: {avg_loss:.6f}")
         
         # Calculate average training loss for the epoch
         avg_train_loss = running_loss / num_batches if num_batches > 0 else 0
