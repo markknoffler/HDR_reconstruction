@@ -351,7 +351,7 @@ def sanity_check(model, criterion, optimizer, train_loader, val_loader, device, 
     
     # Forward pass with 6 inputs
     #with autocast():
-    outputs = model(gamma, underexposed, overexposed, original, clahe, hist_eq)
+    outputs = model(underexposed, overexposed, original)
     loss_out = criterion(outputs, ground_truth)
 
     #outputs = model(gamma, underexposed, overexposed, original, clahe, hist_eq)
@@ -383,7 +383,7 @@ def sanity_check(model, criterion, optimizer, train_loader, val_loader, device, 
         original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
         
         # Forward pass with 6 inputs
-        outputs = model(gamma, underexposed, overexposed, original, clahe, hist_eq)
+        outputs = model(underexposed, overexposed, original)
         pred = outputs
 
         # IMPORTANT: use (C,H,W) not (1,C,H,W)
@@ -439,7 +439,7 @@ def validate_model(model, val_loader, device, epoch, hdrvdp_calculator, save_sam
             clahe = clahe.half()
             
             # Forward pass with 6 inputs
-            outputs = model(gamma, underexposed, overexposed, original, clahe, hist_eq)
+            outputs = model(underexposed, overexposed, original)
             hdr_pred = outputs
             
             # Save samples (first 10 images)
@@ -629,7 +629,7 @@ def main():
 
             # *** DEEPSPEED CHANGE: Forward pass (NO autocast!) ***
             # DeepSpeed automatically uses FP16
-            outputs = model_engine(gamma, underexposed, overexposed, original, clahe, hist_eq)
+            outputs = model_engine(underexposed, overexposed, original)
             
             # Calculate loss
             #loss_out = criterion(outputs, ground_truth)
