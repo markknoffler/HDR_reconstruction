@@ -25,7 +25,7 @@ from util import (
     save_ldr_image,
     update_lr,
 )
-import deepspeed
+#import deepspeed
 
 
 from data_loader import HDRDataset
@@ -335,19 +335,25 @@ def sanity_check(model, criterion, optimizer, train_loader, val_loader, device, 
     #ground_truth = data["hdr_image"].to(device)
 
     # *** DEEPSPEED CHANGE: Data to GPU and FP16 ***
-    input_ldr = data["ldr_image"].cuda().half()  # Add .half()
-    ground_truth = data["hdr_image"].cuda().half()  # Add .half()
+#    input_ldr = data["ldr_image"].cuda().half()  # Add .half()
+#    ground_truth = data["hdr_image"].cuda().half()  # Add .half()
+#
+#    
+#    # Apply transformations
+#    original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
+#
+#    original = original.half()
+#    gamma = gamma.half()
+#    underexposed = underexposed.half()
+#    overexposed = overexposed.half()
+#    hist_eq = hist_eq.half()
+#    clahe = clahe.half()
 
-    
+    input_ldr = data["ldr_image"].to(device)
+    ground_truth = data["hdr_image"].to(device)
+
     # Apply transformations
     original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
-
-    original = original.half()
-    gamma = gamma.half()
-    underexposed = underexposed.half()
-    overexposed = overexposed.half()
-    hist_eq = hist_eq.half()
-    clahe = clahe.half()
     
     # Forward pass with 6 inputs
     #with autocast():
@@ -425,18 +431,25 @@ def validate_model(model, val_loader, device, epoch, hdrvdp_calculator, save_sam
             #input_ldr = data["ldr_image"].to(device)
             #ground_truth = data["hdr_image"].to(device)
 
-            input_ldr = data["ldr_image"].cuda().half()  # Add .cuda().half()
-            ground_truth = data["hdr_image"].cuda().half()  # Add .cuda().half()
+#            input_ldr = data["ldr_image"].cuda().half()  # Add .cuda().half()
+#            ground_truth = data["hdr_image"].cuda().half()  # Add .cuda().half()
+#            
+#            # Apply transformations
+#            original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
+#
+#            original = original.half()
+#            gamma = gamma.half()
+#            underexposed = underexposed.half()
+#            overexposed = overexposed.half()
+#            hist_eq = hist_eq.half()
+#            clahe = clahe.half()
+
+            input_ldr = data["ldr_image"].to(device)
+            ground_truth = data["hdr_image"].to(device)
             
             # Apply transformations
             original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
 
-            original = original.half()
-            gamma = gamma.half()
-            underexposed = underexposed.half()
-            overexposed = overexposed.half()
-            hist_eq = hist_eq.half()
-            clahe = clahe.half()
             
             # Forward pass with 6 inputs
             outputs = model(underexposed, overexposed, original)
@@ -536,24 +549,34 @@ def main():
     # *** DEEPSPEED CHANGE: Model initialization ***
     # REMOVE ALL THE OLD GPU CONFIGURATION CODE
     # ========================================
-    model = Dynamic_attention_model(256, 512, 1024, 2048)
+    #model = Dynamic_attention_model(256, 512, 1024, 2048)
     # DON'T call .to(device) - DeepSpeed handles it!
     
-    optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr)
+    #optimizer = torch.optim.Adam(model.parameters(), lr=opt.lr)
     
     # ========================================
     # *** DEEPSPEED CHANGE: Initialize DeepSpeed ***
     # ========================================
-    model_engine, optimizer, _, _ = deepspeed.initialize(
-        model=model,
-        model_parameters=model.parameters(),
-        config='ds_config.json'
-    )
+#    model_engine, optimizer, _, _ = deepspeed.initialize(
+#        model=model,
+#        model_parameters=model.parameters(),
+#        config='ds_config.json'
+#    )
     
     # Loss function (no .to(device) needed)
     #criterion = EnhancedModelLoss()
     #criterion = EnhancedModelLoss().cuda().half()
-    criterion = EnhancedModelLoss()
+    device = torch.device('cuda:0')
+    model = Dynamic_attention_model(256, 512, 1024, 2048).to(device)
+    #model = model.half()  # Use FP16
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=opt.lr)
+    scaler = torch.cuda.amp.GradScaler()
+
+    print(f"\nModel loaded on GPU 0 with FP16")
+
+    #criterion = EnhancedModelLoss()
+    criterion = EnhancedModelLoss().to(device)
     
     # ========================================
     # Load checkpoint if continuing training
@@ -564,26 +587,42 @@ def main():
     best_val_hdrvdp2 = 0
     best_val_hdrvdp3 = 0
     
+#    if opt.continue_train:
+#        try:
+#            # DeepSpeed checkpoint loading
+#            _, client_state = model_engine.load_checkpoint(CHECKPOINT_DIR)
+#            if client_state:
+#                start_epoch = client_state['epoch'] + 1
+#                best_val_psnr = client_state.get('best_val_psnr', 0)
+#                best_val_ssim = client_state.get('best_val_ssim', 0)
+#                best_val_hdrvdp2 = client_state.get('best_val_hdrvdp2', 0)
+#                best_val_hdrvdp3 = client_state.get('best_val_hdrvdp3', 0)
+#                print(f"Resuming training from epoch {start_epoch}")
+#        except Exception as e:
+#            print(f"Checkpoint not found: {e}. Training from scratch.")
+#            start_epoch = 1
     if opt.continue_train:
         try:
-            # DeepSpeed checkpoint loading
-            _, client_state = model_engine.load_checkpoint(CHECKPOINT_DIR)
-            if client_state:
-                start_epoch = client_state['epoch'] + 1
-                best_val_psnr = client_state.get('best_val_psnr', 0)
-                best_val_ssim = client_state.get('best_val_ssim', 0)
-                best_val_hdrvdp2 = client_state.get('best_val_hdrvdp2', 0)
-                best_val_hdrvdp3 = client_state.get('best_val_hdrvdp3', 0)
-                print(f"Resuming training from epoch {start_epoch}")
+            checkpoint = torch.load(os.path.join(CHECKPOINT_DIR, 'best_model.pth'))
+            model.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            start_epoch = checkpoint['epoch'] + 1
+            best_val_psnr = checkpoint.get('best_val_psnr', 0)
+            best_val_ssim = checkpoint.get('best_val_ssim', 0)
+            best_val_hdrvdp2 = checkpoint.get('best_val_hdrvdp2', 0)
+            best_val_hdrvdp3 = checkpoint.get('best_val_hdrvdp3', 0)
+            print(f"Resuming training from epoch {start_epoch}")
         except Exception as e:
             print(f"Checkpoint not found: {e}. Training from scratch.")
             start_epoch = 1
+
     
     # ========================================
     # Training loop
     # ========================================
-    print("\nStarting training with DeepSpeed ZeRO-3...")
-    print(f"Model will be automatically sharded across {torch.cuda.device_count()} GPUs + CPU offloading")
+    #print("\nStarting training with DeepSpeed ZeRO-3...")
+    #print(f"Model will be automatically sharded across {torch.cuda.device_count()} GPUs + CPU offloading")
+    print("\nStarting training on GPU 0...")
     
     for epoch in range(start_epoch, opt.epochs + 1):
         epoch_start = time.time()
@@ -599,7 +638,8 @@ def main():
         print(f"\nEpoch: {epoch}/{opt.epochs}")
         
         # Training phase
-        model_engine.train()
+        #model_engine.train()
+        model.train()
         ldr_transformer = LDRTransforms(
             gamma_value=2.2,
             underexposed_ev=-2.0,
@@ -613,40 +653,59 @@ def main():
             #input_ldr = data["ldr_image"].cuda()
             #ground_truth = data["hdr_image"].cuda()
 
-            input_ldr = data["ldr_image"].cuda().half()  # Add .cuda().half()
-            ground_truth = data["hdr_image"].cuda().half()  # Add .cuda().half()
+#            input_ldr = data["ldr_image"].cuda().half()  # Add .cuda().half()
+#            ground_truth = data["hdr_image"].cuda().half()  # Add .cuda().half()
 
+            input_ldr = data["ldr_image"].to(device)
+            ground_truth = data["hdr_image"].to(device)
             
             # Apply transformations
-            original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
+#            original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
+#
+#            original = original.half()
+#            gamma = gamma.half()
+#            underexposed = underexposed.half()
+#            overexposed = overexposed.half()
+#            hist_eq = hist_eq.half()
+#            clahe = clahe.half()
 
-            original = original.half()
-            gamma = gamma.half()
-            underexposed = underexposed.half()
-            overexposed = overexposed.half()
-            hist_eq = hist_eq.half()
-            clahe = clahe.half()
+            original, gamma, underexposed, overexposed, hist_eq, clahe = ldr_transformer(input_ldr)
 
             # *** DEEPSPEED CHANGE: Forward pass (NO autocast!) ***
             # DeepSpeed automatically uses FP16
-            outputs = model_engine(underexposed, overexposed, original)
-            
-            # Calculate loss
-            #loss_out = criterion(outputs, ground_truth)
-            loss_out = criterion(outputs.cpu(), ground_truth.cpu())
-            
-            if isinstance(loss_out, (tuple, list)):
-                loss = loss_out[0]
-            elif isinstance(loss_out, dict):
-                loss = loss_out["loss"]
-            else:
-                loss = loss_out
+#            outputs = model_engine(underexposed, overexposed, original)
+#            
+#            # Calculate loss
+#            #loss_out = criterion(outputs, ground_truth)
+#            loss_out = criterion(outputs.cpu(), ground_truth.cpu())
+#            
+#            if isinstance(loss_out, (tuple, list)):
+#                loss = loss_out[0]
+#            elif isinstance(loss_out, dict):
+#                loss = loss_out["loss"]
+#            else:
+#                loss = loss_out
+#            
+#            running_loss += loss.item()
+#            
+#            # *** DEEPSPEED CHANGE: Backward pass ***
+#            model_engine.backward(loss)
+#            model_engine.step()
+            #
+
+                        # Forward pass with mixed precision
+            with torch.cuda.amp.autocast():
+                outputs = model(underexposed, overexposed, original)
+                loss_out = criterion(outputs, ground_truth)
+                loss = unwrap_loss(loss_out)
             
             running_loss += loss.item()
             
-            # *** DEEPSPEED CHANGE: Backward pass ***
-            model_engine.backward(loss)
-            model_engine.step()
+            # Backward pass with gradient scaling
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad(set_to_none=True)
             
             num_batches += 1
             
@@ -661,10 +720,15 @@ def main():
         
         # Validation phase
         print("Validating...")
+        #val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3 = validate_model(
+            #model_engine, val_loader, torch.device('cuda:0'), epoch, hdrvdp_calculator,
+            #save_samples=(epoch % opt.save_ckpt_after == 0 or epoch == 1)
+        #)
         val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3 = validate_model(
-            model_engine, val_loader, torch.device('cuda:0'), epoch, hdrvdp_calculator,
+            model, val_loader, device, epoch, hdrvdp_calculator,
             save_samples=(epoch % opt.save_ckpt_after == 0 or epoch == 1)
         )
+
         
         # Save metrics to CSV
         save_metrics_to_csv(CSV_FILE, epoch, avg_train_loss, val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3)
@@ -682,30 +746,56 @@ def main():
         print(f"{'='*60}")
         
         # *** DEEPSPEED CHANGE: Save checkpoint ***
-        client_state = {
-            'epoch': epoch,
-            'best_val_psnr': best_val_psnr,
-            'best_val_ssim': best_val_ssim,
-            'best_val_hdrvdp2': best_val_hdrvdp2,
-            'best_val_hdrvdp3': best_val_hdrvdp3,
-            'avg_train_loss': avg_train_loss,
-            'val_psnr': val_psnr,
-            'val_ssim': val_ssim
-        }
-        
+#        client_state = {
+#            'epoch': epoch,
+#            'best_val_psnr': best_val_psnr,
+#            'best_val_ssim': best_val_ssim,
+#            'best_val_hdrvdp2': best_val_hdrvdp2,
+#            'best_val_hdrvdp3': best_val_hdrvdp3,
+#            'avg_train_loss': avg_train_loss,
+#            'val_psnr': val_psnr,
+#            'val_ssim': val_ssim
+#        }
+#        
+#        if val_psnr > best_val_psnr:
+#            best_val_psnr = val_psnr
+#            best_val_ssim = val_ssim
+#            best_val_hdrvdp2 = val_hdrvdp2
+#            best_val_hdrvdp3 = val_hdrvdp3
+#            
+#            # Save best model
+#            model_engine.save_checkpoint(CHECKPOINT_DIR, tag=f'best_epoch_{epoch}', client_state=client_state)
+#            print(f"  ✓ Saved best model with PSNR: {val_psnr:.4f}")
+#        
+#        # Save regular checkpoint
+#        if epoch % opt.save_ckpt_after == 0:
+#            model_engine.save_checkpoint(CHECKPOINT_DIR, tag=f'epoch_{epoch}', client_state=client_state)
+#            print(f"  ✓ Saved checkpoint at epoch {epoch}")
+
+                # Save checkpoint
         if val_psnr > best_val_psnr:
             best_val_psnr = val_psnr
             best_val_ssim = val_ssim
             best_val_hdrvdp2 = val_hdrvdp2
             best_val_hdrvdp3 = val_hdrvdp3
             
-            # Save best model
-            model_engine.save_checkpoint(CHECKPOINT_DIR, tag=f'best_epoch_{epoch}', client_state=client_state)
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'best_val_psnr': best_val_psnr,
+                'best_val_ssim': best_val_ssim,
+                'val_psnr': val_psnr,
+                'val_ssim': val_ssim
+            }, os.path.join(CHECKPOINT_DIR, 'best_model.pth'))
             print(f"  ✓ Saved best model with PSNR: {val_psnr:.4f}")
         
-        # Save regular checkpoint
         if epoch % opt.save_ckpt_after == 0:
-            model_engine.save_checkpoint(CHECKPOINT_DIR, tag=f'epoch_{epoch}', client_state=client_state)
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+            }, os.path.join(CHECKPOINT_DIR, f'epoch_{epoch}.pth'))
             print(f"  ✓ Saved checkpoint at epoch {epoch}")
     
     print("\n" + "="*60)
