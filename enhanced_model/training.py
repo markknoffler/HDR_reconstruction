@@ -292,7 +292,8 @@ def compute_psnr_ssim(pred, gt):
     # SSIM calculation - work with single image (C, H, W)
     generated = (np.transpose(pred.cpu().numpy(), (1, 2, 0)) + 1) / 2.0
     real = (np.transpose(gt.cpu().numpy(), (1, 2, 0)) + 1) / 2.0
-    ssim = compare_ssim(generated, real, multichannel=True)
+    ssim = compare_ssim(generated, real, channel_axis=-1, win_size=7)
+
     
     return psnr, ssim
 
