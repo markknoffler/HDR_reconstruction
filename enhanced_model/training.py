@@ -11,6 +11,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset, random_split
 from tqdm import tqdm
 import argparse
+import torch.nn.functional as F
 
 # Import from FHDR code structure
 from model import Dynamic_attention_model
@@ -285,7 +286,7 @@ def compute_psnr_ssim(pred, gt):
     # PSNR calculation
     mu_tonemap_gt = mu_tonemap(gt_batch)
     mu_tonemap_pred = mu_tonemap(pred_batch)
-    mse = mse_loss(mu_tonemap_pred, mu_tonemap_gt)
+    mse = F.mse_loss(mu_tonemap_pred, mu_tonemap_gt)
     psnr = 10 * np.log10(1 / mse.item())
     
     # SSIM calculation - work with single image (C, H, W)
