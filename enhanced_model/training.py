@@ -575,8 +575,49 @@ def main():
 
     print(f"\nModel loaded on GPU 0 with FP16")
 
-    #criterion = EnhancedModelLoss()
     criterion = EnhancedModelLoss().to(device)
+    
+    # ========================================
+    # SANITY CHECK: Run validation before training
+    # ========================================
+    print("\n" + "="*60)
+    print("Running pre-training validation sanity check...")
+    print("="*60)
+    
+    try:
+        # Test validation on first 10 samples
+        val_subset = torch.utils.data.Subset(val_dataset, range(min(10, len(val_dataset))))
+        val_subset_loader = DataLoader(val_subset, batch_size=1, shuffle=False)
+        
+        print("Testing validation pipeline on 10 samples...")
+        test_psnr, test_ssim, test_hdrvdp2, test_hdrvdp3 = validate_model(
+            model, val_subset_loader, device, 0, hdrvdp_calculator, save_samples=False
+        )
+        
+        print(f"✓ Validation sanity check PASSED!")
+        print(f"  Sample PSNR: {test_psnr:.4f}")
+        print(f"  Sample SSIM: {test_ssim:.4f}")
+        print(f"  Sample HDR-VDP-2: {test_hdrvdp2:.4f}")
+        print(f"  Sample HDR-VDP-3: {test_hdrvdp3:.4f}")
+        print("="*60 + "\n")
+        
+    except Exception as e:
+        print(f"\n❌ VALIDATION SANITY CHECK FAILED!")
+        print(f"Error: {e}")
+        print("\nFix the error above before starting training.")
+        import traceback
+        traceback.print_exc()
+        return  # Exit before training
+    
+    # ========================================
+    # Load checkpoint if continuing training
+    # ========================================
+    #start_epoch = 1
+    #best_val_psnr = 0
+
+
+    #criterion = EnhancedModelLoss()
+    #criterion = EnhancedModelLoss().to(device)
     
     # ========================================
     # Load checkpoint if continuing training
