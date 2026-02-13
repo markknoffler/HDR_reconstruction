@@ -266,7 +266,7 @@ class HDRVDPMetrics:
 #    # Normalize PSNR to a 0-10 "quality" score
 #    return float(np.clip(psnr_val / 10.0, 0.0, 10.0))
 
-def compute_psnr_ssim(pred, gt, avg_psnr, avg_ssim):
+def compute_psnr_ssim(pred, gt):
     """
     Compute PSNR-μ and SSIM matching FHDR implementation.
     
