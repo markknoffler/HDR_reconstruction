@@ -27,7 +27,7 @@ class Vgg19(nn.Module):
     def __init__(self, requires_grad=False):
         super(Vgg19, self).__init__()
         #vgg_pretrained_features = models.vgg19(pretrained=True).features
-        vgg_pretrained_features = models.vgg19(pretrained=True).features.half()
+        vgg_pretrained_features = models.vgg19(pretrained=True).features
         self.slice1 = nn.Sequential()
         self.slice2 = nn.Sequential()
         self.slice3 = nn.Sequential()
