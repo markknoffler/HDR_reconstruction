@@ -5,16 +5,6 @@ import torch.nn.functional as F
 from torchvision import models
 
 
-#class ToneMapper(nn.Module):
-#    def __init__(self, mu=5000.0):
-#        super(ToneMapper, self).__init__()
-#        self.mu = mu
-#    
-#    def forward(self, hdr):
-#        hdr = (hdr + 1.0) / 2.0
-#        tone_mapped = torch.log(1.0 + self.mu * hdr) / torch.log(torch.tensor(1.0 + self.mu))
-#        return tone_mapped
-#
 class ToneMapper(nn.Module):
     def __init__(self, mu=5000.0):
         super(ToneMapper, self).__init__()
@@ -24,11 +14,10 @@ class ToneMapper(nn.Module):
     def forward(self, hdr):
         # Clamp to safe range FIRST
         hdr = torch.clamp((hdr + 1.0) / 2.0, 0.0, 1.0)
-        
         # Use log1p for numerical stability
         tone_mapped = torch.log1p(self.mu * hdr) / self.log_mu_plus_1
-        
         return tone_mapped
+
 
 class L1Loss(nn.Module):
     def __init__(self):
@@ -41,7 +30,6 @@ class L1Loss(nn.Module):
 class Vgg19(nn.Module):
     def __init__(self, requires_grad=False):
         super(Vgg19, self).__init__()
-        #vgg_pretrained_features = models.vgg19(pretrained=True).features
         vgg_pretrained_features = models.vgg19(pretrained=True).features
         self.slice1 = nn.Sequential()
         self.slice2 = nn.Sequential()
@@ -91,34 +79,13 @@ class VGGPerceptualLoss(nn.Module):
         return loss
 
 
-#class WeberPSNRLoss(nn.Module):
-#    def __init__(self, bit_depth=8, weber_fraction=0.02):
-#        super(WeberPSNRLoss, self).__init__()
-#        self.bit_depth = bit_depth
-#        self.max_val = 2 ** bit_depth - 1
-#        self.weber_fraction = weber_fraction
-#        self.eps = 1e-8
-#    
-#    def forward(self, pred, target):
-#        B, C, H, W = pred.shape
-#        pred_scaled = pred * self.max_val
-#        target_scaled = target * self.max_val
-#        weber_weights = (self.weber_fraction * self.max_val) / (target_scaled + self.eps)
-#        squared_diff = (target_scaled - pred_scaled) ** 2
-#        weighted_squared_error = (weber_weights ** 2) * squared_diff
-#        mse_weighted = torch.mean(weighted_squared_error, dim=[1, 2, 3])
-#        psnr_w = 10.0 * torch.log10((self.max_val ** 2) / (mse_weighted + self.eps))
-#        loss = torch.mean(1.0 / (psnr_w + self.eps))
-#        return loss
-#
-
 class WeberPSNRLoss(nn.Module):
     def __init__(self, bit_depth=8, weber_fraction=0.02):
         super(WeberPSNRLoss, self).__init__()
         self.bit_depth = bit_depth
         self.max_val = 2 ** bit_depth - 1
         self.weber_fraction = weber_fraction
-        self.eps = 1e-6  # INCREASED from 1e-8
+        self.eps = 1e-6
     
     def forward(self, pred, target):
         pred_scaled = torch.clamp(pred * self.max_val, 0, self.max_val)
@@ -131,12 +98,15 @@ class WeberPSNRLoss(nn.Module):
         weighted_squared_error = (weber_weights ** 2) * squared_diff
         
         mse_weighted = torch.mean(weighted_squared_error, dim=[1, 2, 3])
-        mse_weighted = torch.clamp(mse_weighted, min=self.eps)  # Prevent log(0)
+        # Clamp mse to at most max_val**2 so that psnr is always >= 0
+        mse_weighted = torch.clamp(mse_weighted, max=self.max_val ** 2)
+        mse_weighted = torch.clamp(mse_weighted, min=self.eps)  # avoid log(0)
         
-        psnr_w = 10.0 * torch.log10((self.max_val ** 2) / mse_weighted)
+        psnr_w = 10.0 * torch.log10((self.max_val ** 2) / mse_weighted)  # now always >= 0
         loss = torch.mean(1.0 / (psnr_w + self.eps))
         
         return loss
+
 
 class MS_SSIM_Loss(nn.Module):
     def __init__(self, max_val=1.0, k1=0.01, k2=0.03, scales=5):
@@ -169,10 +139,15 @@ class MS_SSIM_Loss(nn.Module):
                 pred = F.avg_pool2d(pred, kernel_size=2, stride=2)
                 target = F.avg_pool2d(target, kernel_size=2, stride=2)
             luminance, cs = self._ssim(pred, target)
+            
+            # Clamp cs_mean to be non-negative to avoid NaN when raising to fractional power
+            cs_mean = torch.mean(cs).clamp(min=0.0)
+            
             if i < self.scales - 1:
-                ms_ssim *= torch.mean(cs) ** weights[i]
+                ms_ssim *= cs_mean ** weights[i]
             else:
-                ms_ssim *= (torch.mean(luminance) ** weights[i]) * (torch.mean(cs) ** weights[i])
+                lum_mean = torch.mean(luminance)
+                ms_ssim *= (lum_mean ** weights[i]) * (cs_mean ** weights[i])
         return 1.0 - ms_ssim
 
 
@@ -228,5 +203,3 @@ class EnhancedModelLoss(nn.Module):
             'color': loss_color.item()
         }
         return total_loss, loss_dict
-
-
