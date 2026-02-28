@@ -322,6 +322,7 @@ def sanity_check(model, criterion, optimizer, train_loader, val_loader, device, 
 
     optimizer.zero_grad(set_to_none=True)
     loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
     optimizer.step()
 
     with torch.no_grad():
@@ -607,6 +608,7 @@ def main():
             # Backward pass
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             
             num_batches += 1

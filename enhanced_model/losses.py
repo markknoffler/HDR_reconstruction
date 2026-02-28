@@ -78,7 +78,6 @@ class VGGPerceptualLoss(nn.Module):
             loss += self.weights[i] * self.criterion(pred_vgg[i], target_vgg[i].detach())
         return loss
 
-
 class WeberPSNRLoss(nn.Module):
     def __init__(self, bit_depth=8, weber_fraction=0.02):
         super(WeberPSNRLoss, self).__init__()
@@ -86,26 +85,56 @@ class WeberPSNRLoss(nn.Module):
         self.max_val = 2 ** bit_depth - 1
         self.weber_fraction = weber_fraction
         self.eps = 1e-6
-    
+
     def forward(self, pred, target):
         pred_scaled = torch.clamp(pred * self.max_val, 0, self.max_val)
         target_scaled = torch.clamp(target * self.max_val, 0, self.max_val)
         
         weber_weights = (self.weber_fraction * self.max_val) / (target_scaled + self.eps)
-        weber_weights = torch.clamp(weber_weights, 0, 100)  # Prevent explosion
+        weber_weights = torch.clamp(weber_weights, 0, 100)
         
         squared_diff = (target_scaled - pred_scaled) ** 2
         weighted_squared_error = (weber_weights ** 2) * squared_diff
         
         mse_weighted = torch.mean(weighted_squared_error, dim=[1, 2, 3])
-        # Clamp mse to at most max_val**2 so that psnr is always >= 0
         mse_weighted = torch.clamp(mse_weighted, max=self.max_val ** 2)
-        mse_weighted = torch.clamp(mse_weighted, min=self.eps)  # avoid log(0)
+        mse_weighted = torch.clamp(mse_weighted, min=self.eps)
         
-        psnr_w = 10.0 * torch.log10((self.max_val ** 2) / mse_weighted)  # now always >= 0
-        loss = torch.mean(1.0 / (psnr_w + self.eps))
+        # PSNR in dB (max around 48 dB for 8‑bit, 96 dB for 16‑bit)
+        psnr_w = 10.0 * torch.log10((self.max_val ** 2) / mse_weighted)
         
+        # Bounded loss: we want loss ~ 0 when psnr is high, and max around 1
+        # Use: loss = 1 / (psnr_w + 1)  -> ranges from ~1 (psnr=0) to ~0.02 (psnr=48)
+        loss = torch.mean(1.0 / (psnr_w + 1.0))
         return loss
+
+#class WeberPSNRLoss(nn.Module):
+#    def __init__(self, bit_depth=8, weber_fraction=0.02):
+#        super(WeberPSNRLoss, self).__init__()
+#        self.bit_depth = bit_depth
+#        self.max_val = 2 ** bit_depth - 1
+#        self.weber_fraction = weber_fraction
+#        self.eps = 1e-6
+#    
+#    def forward(self, pred, target):
+#        pred_scaled = torch.clamp(pred * self.max_val, 0, self.max_val)
+#        target_scaled = torch.clamp(target * self.max_val, 0, self.max_val)
+#        
+#        weber_weights = (self.weber_fraction * self.max_val) / (target_scaled + self.eps)
+#        weber_weights = torch.clamp(weber_weights, 0, 100)  # Prevent explosion
+#        
+#        squared_diff = (target_scaled - pred_scaled) ** 2
+#        weighted_squared_error = (weber_weights ** 2) * squared_diff
+#        
+#        mse_weighted = torch.mean(weighted_squared_error, dim=[1, 2, 3])
+#        # Clamp mse to at most max_val**2 so that psnr is always >= 0
+#        mse_weighted = torch.clamp(mse_weighted, max=self.max_val ** 2)
+#        mse_weighted = torch.clamp(mse_weighted, min=self.eps)  # avoid log(0)
+#        
+#        psnr_w = 10.0 * torch.log10((self.max_val ** 2) / mse_weighted)  # now always >= 0
+#        loss = torch.mean(1.0 / (psnr_w + self.eps))
+#        
+#        return loss
 
 
 class MS_SSIM_Loss(nn.Module):
@@ -167,11 +196,16 @@ class ColorLoss(nn.Module):
 class EnhancedModelLoss(nn.Module):
     def __init__(self, alpha=0.18, beta=0.5, gamma=0.82, delta=0.80, epsilon=0.82, mu=5000.0):
         super(EnhancedModelLoss, self).__init__()
-        self.alpha = alpha
-        self.beta = beta
-        self.gamma = gamma
-        self.delta = delta
-        self.epsilon = epsilon
+        self.alpha = 0.4   # L1
+        self.beta  = 0.3   # VGG
+        self.gamma = 0.1   # Weber (now bounded)
+        self.delta = 0.1   # MS-SSIM
+        self.epsilon = 0.1 # Color
+#        self.alpha = alpha
+#        self.beta = beta
+#        self.gamma = gamma
+#        self.delta = delta
+#        self.epsilon = epsilon
         self.tone_mapper = ToneMapper(mu=mu)
         self.l1_loss = L1Loss()
         self.vgg_loss = VGGPerceptualLoss()
