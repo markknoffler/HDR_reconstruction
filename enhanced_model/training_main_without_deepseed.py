@@ -462,6 +462,7 @@ def main():
     HDR_DIR = "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/SingleHDR_training_data/HDR-Real/HDR_gt"
     CHECKPOINT_DIR = "checkpoints"
     CSV_FILE = "training_metrics.csv"
+    LATEST_CKPT = os.path.join(CHECKPOINT_DIR, 'latest.pth')   # <-- ADD THIS LINE
     
     # Create directories
     make_required_directories(mode="train")
@@ -549,20 +550,24 @@ def main():
     best_val_hdrvdp3 = 0
     
     if opt.continue_train:
-        try:
-            checkpoint = torch.load(os.path.join(CHECKPOINT_DIR, 'best_model.pth'))
-            model.load_state_dict(checkpoint['model_state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            start_epoch = checkpoint['epoch'] + 1
-            best_val_psnr = checkpoint.get('best_val_psnr', 0)
-            best_val_ssim = checkpoint.get('best_val_ssim', 0)
-            best_val_hdrvdp2 = checkpoint.get('best_val_hdrvdp2', 0)
-            best_val_hdrvdp3 = checkpoint.get('best_val_hdrvdp3', 0)
-            print(f"Resuming training from epoch {start_epoch}")
-        except Exception as e:
-            print(f"Checkpoint not found: {e}. Training from scratch.")
-            start_epoch = 1
-    
+        latest_checkpoint_path = os.path.join(CHECKPOINT_DIR, 'latest.pth')
+        if os.path.isfile(latest_checkpoint_path):
+            try:
+                checkpoint = torch.load(latest_checkpoint_path, map_location=device)
+                model.load_state_dict(checkpoint['model_state_dict'])
+                optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                start_epoch = checkpoint['epoch'] + 1
+                best_val_psnr = checkpoint.get('best_val_psnr', 0)
+                best_val_ssim = checkpoint.get('best_val_ssim', 0)
+                best_val_hdrvdp2 = checkpoint.get('best_val_hdrvdp2', 0)
+                best_val_hdrvdp3 = checkpoint.get('best_val_hdrvdp3', 0)
+                print(f"Resuming training from epoch {start_epoch} (latest checkpoint)")
+            except Exception as e:
+                print(f"Error loading latest checkpoint: {e}. Training from scratch.")
+                start_epoch = 1
+        else:
+            print("No latest checkpoint found. Training from scratch.")
+
     # ========================================
     # Training loop
     # ========================================
@@ -657,11 +662,15 @@ def main():
                 'optimizer_state_dict': optimizer.state_dict(),
                 'best_val_psnr': best_val_psnr,
                 'best_val_ssim': best_val_ssim,
+                'best_val_hdrvdp2': best_val_hdrvdp2,   # <-- added
+                'best_val_hdrvdp3': best_val_hdrvdp3,   # <-- added
                 'val_psnr': val_psnr,
-                'val_ssim': val_ssim
+                'val_ssim': val_ssim,
+                'val_hdrvdp2': val_hdrvdp2,             # <-- added
+                'val_hdrvdp3': val_hdrvdp3              # <-- added
             }, os.path.join(CHECKPOINT_DIR, 'best_model.pth'))
             print(f"  ✓ Saved best model with PSNR: {val_psnr:.4f}")
-        
+
         if epoch % opt.save_ckpt_after == 0:
             torch.save({
                 'epoch': epoch,
@@ -669,6 +678,18 @@ def main():
                 'optimizer_state_dict': optimizer.state_dict(),
             }, os.path.join(CHECKPOINT_DIR, f'epoch_{epoch}.pth'))
             print(f"  ✓ Saved checkpoint at epoch {epoch}")
+
+                # Save latest checkpoint (always overwrite)
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'best_val_psnr': best_val_psnr,
+            'best_val_ssim': best_val_ssim,
+            'best_val_hdrvdp2': best_val_hdrvdp2,
+            'best_val_hdrvdp3': best_val_hdrvdp3,
+        }, LATEST_CKPT)
+        print(f"  ✓ Saved latest checkpoint")
     
     print("\n" + "="*60)
     print("TRAINING COMPLETED!")
