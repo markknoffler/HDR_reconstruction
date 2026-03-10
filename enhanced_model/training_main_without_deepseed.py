@@ -3,6 +3,9 @@ Script for training the ArtHDRNet model with validation metrics and checkpointin
 """
 
 import os
+
+# PyTorch 2.6+: ensure we can load full checkpoints (model+optimizer) with numpy objects
+os.environ.pop("TORCH_FORCE_WEIGHTS_ONLY_LOAD", None)  # unset if present, so weights_only=False works
 import time
 import csv
 import numpy as np
@@ -553,7 +556,17 @@ def main():
         latest_checkpoint_path = os.path.join(CHECKPOINT_DIR, 'latest.pth')
         if os.path.isfile(latest_checkpoint_path):
             try:
-                checkpoint = torch.load(latest_checkpoint_path, map_location=device)
+                # PyTorch 2.6+: allowlist numpy types in optimizer state (overrides weights_only when env forces it)
+                _safe_globals = []
+                try:
+                    import numpy.core.multiarray as _np_multiarray
+                    _safe_globals.extend([_np_multiarray.scalar, getattr(_np_multiarray, "_reconstruct", None)])
+                except (ImportError, AttributeError):
+                    pass
+                _safe_globals = [g for g in _safe_globals if g is not None]
+                if _safe_globals:
+                    torch.serialization.add_safe_globals(_safe_globals)
+                checkpoint = torch.load(latest_checkpoint_path, map_location=device, weights_only=False)
                 model.load_state_dict(checkpoint['model_state_dict'])
                 optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
                 start_epoch = checkpoint['epoch'] + 1
