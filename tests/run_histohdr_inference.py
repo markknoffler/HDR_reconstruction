@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 HistoHDRnet inference script: loads LDR images from tests/ldr_images,
-processes them with the pretrained HistoHDRNet model (checkpoint_epoch_200),
+processes them with the pretrained HistoHDRNet model (best_model_epoch_70),
 and saves HDR outputs to tests/hdr_output_histohdr.
 """
 
@@ -21,9 +21,9 @@ sys.path.insert(0, HISTOHDR_PATH)
 
 from model import HistoHDRNet
 
-# Default paths
+# Default paths (HistoHDRnet has best_model_epoch_*.pth, latest is 70)
 DEFAULT_CHECKPOINT = os.path.join(
-    PROJECT_ROOT, "HistoHDRnet", "checkpoints", "checkpoint_epoch_200.pth"
+    PROJECT_ROOT, "HistoHDRnet", "checkpoints", "best_model_epoch_70.pth"
 )
 DEFAULT_LDR_DIR = os.path.join(SCRIPT_DIR, "ldr_images")
 DEFAULT_HDR_DIR = os.path.join(SCRIPT_DIR, "hdr_output_histohdr")
@@ -65,7 +65,8 @@ def run_inference(checkpoint_path, ldr_dir, hdr_dir, image_size, device):
     ckpt = checkpoint_path
     if not os.path.isfile(ckpt):
         for alt in [
-            os.path.join(PROJECT_ROOT, "HistoHDRnet", "checkpoints", "checkpoint_epoch_200.pth"),
+            os.path.join(PROJECT_ROOT, "HistoHDRnet", "checkpoints", "best_model_epoch_70.pth"),
+            os.path.join(PROJECT_ROOT, "HistoHDRnet", "checkpoints", "best_model_epoch_60.pth"),
             os.path.join(PROJECT_ROOT, "HistoHDRnet", "checkpoints", "best_model.pth"),
         ]:
             if os.path.isfile(alt):
