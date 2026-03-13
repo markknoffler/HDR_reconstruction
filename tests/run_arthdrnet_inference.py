@@ -43,9 +43,10 @@ def load_ldr_image(path, size=None):
 
 def save_hdr_image(img_np, path):
     """Save HDR image in Radiance .hdr format using imageio."""
-    import imageio.v3 as iio
+    import imageio
     img_np = np.clip(img_np, 0.0, None).astype(np.float32)
-    iio.imwrite(path, img_np, format="HDR-FI")
+    # Use extension-based format (avoids format= kwarg issues across imageio versions)
+    imageio.imwrite(path, img_np)
 
 
 def run_inference(checkpoint_path, ldr_dir, hdr_dir, image_size, device, use_epoch_200=True):
