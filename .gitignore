@@ -1,1 +1,21 @@
 .DS_Store
+# Generated outputs
+__pycache__/
+**/checkpoints/
+**/generated_images*/
+**/validation_results/
+**/training_log*.csv
+**/training_metrics.csv
+deepspeed_log.txt
+
+# HDR output files
+tests/hdr_output_*/
+
+# Large files / binaries
+*.zip
+*.deb
+*.hdr
+.DS_Store
+
+# Data
+SingleHDR_training_data/
