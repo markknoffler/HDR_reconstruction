@@ -266,7 +266,12 @@ def validate(model, dataloader, criterion, device):
                 real = (
                     np.transpose(hdr_gt[batch_ind].cpu().numpy(), (1, 2, 0)) + 1
                 ) / 2.0
-                ssim_val = compare_ssim(generated, real, multichannel=True)
+                # win_size must be odd and <= min(H,W); default 7 can exceed small images
+                h, w = generated.shape[:2]
+                win_size = min(7, min(h, w))
+                if win_size % 2 == 0:
+                    win_size = max(3, win_size - 1)
+                ssim_val = compare_ssim(generated, real, multichannel=True, win_size=win_size)
 
 
 
