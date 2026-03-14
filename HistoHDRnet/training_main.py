@@ -278,7 +278,8 @@ def validate(model, dataloader, criterion, device):
                     ssim_val = compare_ssim(
                         generated, real,
                         channel_axis=-1 if generated.ndim == 3 else None,
-                        win_size=win_size
+                        win_size=win_size,
+                        data_range=1.0
                     )
 
 
