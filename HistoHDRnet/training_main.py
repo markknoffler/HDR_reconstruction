@@ -51,6 +51,7 @@ IMAGE_SIZE = 512
 ACCUMULATION_STEPS = 5
 DEVICE = "cuda:0"
 
+# Ensure output dirs exist (at import and again at train start)
 os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 os.makedirs(GENERATED_DIR, exist_ok=True)
 
@@ -123,6 +124,95 @@ class HDRDataset(Dataset):
 
         return ldr_gt, ldr_his, hdr_gt, os.path.basename(ldr_path)
 
+
+class HDRVDPMetrics:
+    """
+    HDR-VDP metric calculator (same as m_training.py / enhanced_model).
+    Uses FovVideoVDP if pyfvvdp available, else PU21-based proxy.
+    """
+    def __init__(self, use_real_hdrvdp=False):
+        self.use_real_hdrvdp = use_real_hdrvdp
+        self.fvvdp_model = None
+        if use_real_hdrvdp:
+            try:
+                import pyfvvdp
+                self.fvvdp2 = pyfvvdp.fvvdp(display_name='standard_fhd', heatmap=None)
+                self.fvvdp3 = pyfvvdp.fvvdp(display_name='standard_4k', heatmap=None)
+                self.hdrvdp_available = True
+                print("✓ FovVideoVDP loaded (HDR-VDP-2/3)")
+            except Exception as e:
+                self.hdrvdp_available = False
+                print(f"⚠ pyfvvdp not available ({e}), using PU21 proxy")
+        else:
+            self.hdrvdp_available = False
+            print("Using PU21-based HDR-VDP proxy metrics")
+
+    def compute_hdrvdp2(self, hdr_pred, hdr_gt):
+        """HDR-VDP-2 style score; inputs (C,H,W) in [-1,1]."""
+        if self.hdrvdp_available:
+            return self._compute_real_fovvdp2(hdr_pred, hdr_gt)
+        return self._compute_pu21_metric(hdr_pred, hdr_gt, mu=5000.0)
+
+    def compute_hdrvdp3(self, hdr_pred, hdr_gt):
+        """HDR-VDP-3 style score; inputs (C,H,W) in [-1,1]."""
+        if self.hdrvdp_available:
+            return self._compute_real_fovvdp3(hdr_pred, hdr_gt)
+        return self._compute_pu21_metric(hdr_pred, hdr_gt, mu=8000.0, use_spatial=True)
+
+    def _compute_real_fovvdp2(self, hdr_pred, hdr_gt):
+        try:
+            pred_np = hdr_pred.detach().cpu().numpy()
+            gt_np = hdr_gt.detach().cpu().numpy()
+            pred_np = np.clip((pred_np + 1.0) * 50.0, 0.01, 100.0)
+            gt_np = np.clip((gt_np + 1.0) * 50.0, 0.01, 100.0)
+            pred_np = np.transpose(pred_np, (1, 2, 0))
+            gt_np = np.transpose(gt_np, (1, 2, 0))
+            Q_JOD, _ = self.fvvdp2.predict(pred_np, gt_np, dim_order='HWC')
+            return float(np.clip(Q_JOD, 0.0, 10.0))
+        except Exception as e:
+            return self._compute_pu21_metric(hdr_pred, hdr_gt, mu=5000.0)
+
+    def _compute_real_fovvdp3(self, hdr_pred, hdr_gt):
+        try:
+            pred_np = hdr_pred.detach().cpu().numpy()
+            gt_np = hdr_gt.detach().cpu().numpy()
+            pred_np = np.clip((pred_np + 1.0) * 50.0, 0.01, 100.0)
+            gt_np = np.clip((gt_np + 1.0) * 50.0, 0.01, 100.0)
+            pred_np = np.transpose(pred_np, (1, 2, 0))
+            gt_np = np.transpose(gt_np, (1, 2, 0))
+            Q_JOD, _ = self.fvvdp3.predict(pred_np, gt_np, dim_order='HWC')
+            return float(np.clip(Q_JOD, 0.0, 10.0))
+        except Exception as e:
+            return self._compute_pu21_metric(hdr_pred, hdr_gt, mu=8000.0, use_spatial=True)
+
+    def _compute_pu21_metric(self, hdr_pred, hdr_gt, mu=5000.0, use_spatial=False):
+        pred_np = hdr_pred.detach().cpu().numpy()
+        gt_np = hdr_gt.detach().cpu().numpy()
+        L_pred = np.clip((pred_np + 1.0) * 50.0, 0.01, 100.0)
+        L_gt = np.clip((gt_np + 1.0) * 50.0, 0.01, 100.0)
+        pu_pred = np.log((L_pred + 1e-4) / (L_pred + 0.01))
+        pu_gt = np.log((L_gt + 1e-4) / (L_gt + 0.01))
+        mse = np.mean((pu_pred - pu_gt) ** 2)
+        if use_spatial:
+            spatial_mse = self._compute_spatial_error(pu_pred, pu_gt)
+            mse = 0.6 * mse + 0.4 * spatial_mse
+        max_val = np.log((100.0 + 1e-4) / (100.0 + 0.01))
+        psnr = 10.0 * np.log10((max_val ** 2) / (mse + 1e-10))
+        return float(np.clip(psnr / 10.0, 0.0, 10.0))
+
+    def _compute_spatial_error(self, pred, gt, scales=[1, 2, 4]):
+        errors = []
+        for scale in scales:
+            if scale == 1:
+                err = np.mean((pred - gt) ** 2)
+            else:
+                pred_down = pred[:, ::scale, ::scale]
+                gt_down = gt[:, ::scale, ::scale]
+                err = np.mean((pred_down - gt_down) ** 2)
+            errors.append(err)
+        weights = np.array([0.5, 0.3, 0.2])[:len(errors)]
+        weights = weights / weights.sum()
+        return np.sum([w * e for w, e in zip(weights, errors)])
 
 
 def compute_hdrvdp2_metric(hdr_pred, hdr_gt):
@@ -221,15 +311,16 @@ def save_sample_images(model, dataloader, epoch, device):
     model.train()
 
 
-def validate(model, dataloader, criterion, device):
+def validate(model, dataloader, criterion, device, hdrvdp_calculator):
     """
-    Validation function with FHDR-style PSNR and SSIM calculation
+    Validation function with FHDR-style PSNR, SSIM, and HDR-VDP-2/3.
     """
     model.eval()
     total_loss = 0
     total_psnr = 0
     total_ssim = 0
     total_hdrvdp2 = 0
+    total_hdrvdp3 = 0
     num_images = 0
 
     with torch.no_grad():
@@ -286,34 +377,34 @@ def validate(model, dataloader, criterion, device):
 
 
                 
-                # --- HDR-VDP2 Proxy Metric ---
-                hdrvdp2_val = compute_hdrvdp2_metric(
-                    hdr_pred[batch_ind:batch_ind+1], 
-                    hdr_gt[batch_ind:batch_ind+1]
-                )
+                # HDR-VDP-2 and HDR-VDP-3 (same as m_training / enhanced_model)
+                pred_img = hdr_pred[batch_ind]
+                gt_img = hdr_gt[batch_ind]
+                hdrvdp2_val = hdrvdp_calculator.compute_hdrvdp2(pred_img, gt_img)
+                hdrvdp3_val = hdrvdp_calculator.compute_hdrvdp3(pred_img, gt_img)
                 
-                # Accumulate metrics
                 total_psnr += psnr_val
                 total_ssim += ssim_val
                 total_hdrvdp2 += hdrvdp2_val
+                total_hdrvdp3 += hdrvdp3_val
                 num_images += 1
                 
-                # Update progress bar
                 pbar.set_postfix({
                     'loss': f'{loss.item():.4f}',
                     'psnr': f'{psnr_val:.2f}',
                     'ssim': f'{ssim_val:.4f}',
-                    'hdrvdp2': f'{hdrvdp2_val:.4f}'
+                    'hdrvdp2': f'{hdrvdp2_val:.4f}',
+                    'hdrvdp3': f'{hdrvdp3_val:.4f}'
                 })
     
-    # Calculate averages
     avg_loss = total_loss / len(dataloader)
     avg_psnr = total_psnr / num_images
     avg_ssim = total_ssim / num_images
     avg_hdrvdp2 = total_hdrvdp2 / num_images
+    avg_hdrvdp3 = total_hdrvdp3 / num_images
     
     model.train()
-    return avg_loss, avg_psnr, avg_ssim, avg_hdrvdp2
+    return avg_loss, avg_psnr, avg_ssim, avg_hdrvdp2, avg_hdrvdp3
 
 def train():
     print("=" * 80)
@@ -326,6 +417,13 @@ def train():
     print(f"Device: {DEVICE}")
     print(f"Learning Rate: {LEARNING_RATE}")
     print("=" * 80)
+
+    # Ensure checkpoint and output dirs exist before training
+    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+    os.makedirs(GENERATED_DIR, exist_ok=True)
+    print(f"Checkpoints will be saved to: {os.path.abspath(CHECKPOINT_DIR)}")
+
+    hdrvdp_calculator = HDRVDPMetrics(use_real_hdrvdp=False)
     
     train_dataset = HDRDataset(LDR_DIR, HDR_DIR, IMAGE_SIZE, mode='train')
     train_loader = DataLoader(
@@ -359,11 +457,11 @@ def train():
 
     print("Running a dry-run validation before training...")
     try:
-        val_loss, val_psnr, val_ssim, val_hdrvdp2 = validate(
-            model, val_loader, criterion, DEVICE
+        val_loss, val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3 = validate(
+            model, val_loader, criterion, DEVICE, hdrvdp_calculator
         )
         print(f"[Dry run] Loss: {val_loss:.4f}, PSNR: {val_psnr:.2f}, "
-            f"SSIM: {val_ssim:.4f}, HDR-VDP2: {val_hdrvdp2:.4f}")
+            f"SSIM: {val_ssim:.4f}, HDR-VDP2: {val_hdrvdp2:.4f}, HDR-VDP3: {val_hdrvdp3:.4f}")
     except Exception as e:
         print("Dry-run validation failed with error:", e)
         raise
@@ -375,8 +473,9 @@ def train():
     if not csv_exists:
         csv_writer.writerow([
             'epoch', 'train_loss', 'val_loss',
-            'val_psnr', 'val_ssim', 'val_hdrvdp2',  # new
+            'val_psnr', 'val_ssim', 'val_hdrvdp2', 'val_hdrvdp3',
             'l1_loss', 'vgg_loss', 'weber_loss', 'ms_ssim_loss', 'color_loss',
+            'f1', 'recall', 'accuracy',
             'learning_rate', 'timestamp'
         ])
 
@@ -435,23 +534,28 @@ def train():
         print(f"  Weber: {epoch_components['weber']:.4f}, MS-SSIM: {epoch_components['ms_ssim']:.4f}")
         print(f"  Color: {epoch_components['color']:.4f}")
         
-        #val_loss, val_psnr, val_ssim = validate(model, val_loader, criterion, DEVICE)
-        val_loss, val_psnr, val_ssim, val_hdrvdp2 = validate(model, val_loader, criterion, DEVICE)
-        print(f" Validation - Loss: {val_loss:.4f}, PSNR: {val_psnr:.2f}, SSIM: {val_ssim:.4f}, HDR-VDP2: {val_hdrvdp2:.4f}") 
+        val_loss, val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3 = validate(
+            model, val_loader, criterion, DEVICE, hdrvdp_calculator
+        )
+        print(f" Validation - Loss: {val_loss:.4f}, PSNR: {val_psnr:.2f}, SSIM: {val_ssim:.4f}, "
+              f"HDR-VDP2: {val_hdrvdp2:.4f}, HDR-VDP3: {val_hdrvdp3:.4f}") 
         #print(f"  Validation - Loss: {val_loss:.4f}, PSNR: {val_psnr:.2f}, SSIM: {val_ssim:.4f}")
         
+        # F1, recall, accuracy: N/A for HDR regression (classification metrics)
         csv_writer.writerow([
-            epoch, avg_train_loss, val_loss, val_psnr, val_ssim, val_hdrvdp2,
+            epoch, avg_train_loss, val_loss, val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3,
             epoch_components['l1'], epoch_components['vgg'],
             epoch_components['weber'], epoch_components['ms_ssim'],
             epoch_components['color'],
+            '', '', '',  # f1, recall, accuracy
             optimizer.param_groups[0]['lr'],
             datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         ])
         csv_file.flush()
 
-        # Save checkpoint every 5 epochs
-        if epoch % 5 == 0:
+        # Save checkpoint at epoch 1 and every 5 epochs
+        if epoch == 1 or epoch % 5 == 0:
+            os.makedirs(CHECKPOINT_DIR, exist_ok=True)
             ckpt_path = os.path.join(CHECKPOINT_DIR, f'checkpoint_epoch_{epoch}.pth')
             torch.save({
                 'epoch': epoch,
