@@ -1,6 +1,7 @@
 import os
 import csv
 import cv2
+import argparse
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
@@ -406,7 +407,36 @@ def validate(model, dataloader, criterion, device, hdrvdp_calculator):
     model.train()
     return avg_loss, avg_psnr, avg_ssim, avg_hdrvdp2, avg_hdrvdp3
 
-def train():
+
+def _find_latest_checkpoint(checkpoint_dir: str):
+    """
+    Return the path to the latest checkpoint (highest epoch), or None if none exist.
+    Supports both `checkpoint_epoch_*.pth` and `best_model_epoch_*.pth`.
+    """
+    patterns = [
+        os.path.join(checkpoint_dir, "checkpoint_epoch_*.pth"),
+        os.path.join(checkpoint_dir, "best_model_epoch_*.pth"),
+    ]
+    candidates = []
+    for pat in patterns:
+        candidates.extend(glob.glob(pat))
+
+    if not candidates:
+        return None
+
+    def _score(path: str):
+        base = os.path.basename(path)
+        epoch = -1
+        for token in base.replace(".pth", "").split("_"):
+            if token.isdigit():
+                epoch = int(token)
+        mtime = os.path.getmtime(path)
+        return (epoch, mtime)
+
+    candidates.sort(key=_score)
+    return candidates[-1]
+
+def train(continue_training: bool = False):
     print("=" * 80)
     print("HistoHDR-Net Training Script")
     print("=" * 80)
@@ -455,6 +485,33 @@ def train():
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE, betas=(0.9, 0.999))
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS, eta_min=1e-6)
 
+    start_epoch = 1
+    best_psnr = 0.0
+    best_epoch = 0
+
+    if continue_training:
+        latest_ckpt = _find_latest_checkpoint(CHECKPOINT_DIR)
+        if latest_ckpt is None:
+            print(f"⚠ --continue-training was set, but no checkpoints found in: {os.path.abspath(CHECKPOINT_DIR)}")
+        else:
+            print(f"Resuming from latest checkpoint: {latest_ckpt}")
+            checkpoint = torch.load(latest_ckpt, map_location=DEVICE)
+            if "model_state_dict" in checkpoint:
+                model.load_state_dict(checkpoint["model_state_dict"])
+            if "optimizer_state_dict" in checkpoint:
+                optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            if "scheduler_state_dict" in checkpoint:
+                try:
+                    scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+                except Exception as e:
+                    print(f"⚠ Could not load scheduler state ({e}); continuing with fresh scheduler.")
+
+            ckpt_epoch = int(checkpoint.get("epoch", 0))
+            start_epoch = max(1, ckpt_epoch + 1)
+            best_psnr = float(checkpoint.get("best_psnr", checkpoint.get("val_psnr", 0.0)) or 0.0)
+            best_epoch = ckpt_epoch
+            print(f"✓ Loaded checkpoint (epoch={ckpt_epoch}); continuing at epoch {start_epoch}")
+
     print("Running a dry-run validation before training...")
     try:
         val_loss, val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3 = validate(
@@ -480,14 +537,11 @@ def train():
         ])
 
     
-    best_psnr = 0.0
-    best_epoch = 0
-    
     print(f"\nStarting training for {NUM_EPOCHS} epochs...")
     print(f"Training samples: {train_size}, Validation samples: {val_split}")
     print("=" * 80)
     
-    for epoch in range(1, NUM_EPOCHS + 1):
+    for epoch in range(start_epoch, NUM_EPOCHS + 1):
         model.train()
         epoch_loss = 0
         epoch_components = {
@@ -605,5 +659,12 @@ def train():
 
 
 if __name__ == "__main__":
-    train()
+    parser = argparse.ArgumentParser(description="HistoHDR-Net training")
+    parser.add_argument(
+        "--continue-training",
+        action="store_true",
+        help="Resume from the latest checkpoint in ./checkpoints (by epoch).",
+    )
+    args = parser.parse_args()
+    train(continue_training=args.continue_training)
 
