@@ -42,7 +42,8 @@ def init_hdrvdp2():
 LDR_DIR = "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/SingleHDR_training_data/HDR-Real/LDR_in"  # Directory containing LDR images (.jpg)
 HDR_DIR = "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/SingleHDR_training_data/HDR-Real/HDR_gt"
 
-CHECKPOINT_DIR = "./checkpoints"
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CHECKPOINT_DIR = os.path.join(_SCRIPT_DIR, "checkpoints")
 GENERATED_DIR = "./generated_images"
 CSV_LOG_FILE = "./training_log.csv"
 BATCH_SIZE = 2
@@ -416,6 +417,7 @@ def _find_latest_checkpoint(checkpoint_dir: str):
     patterns = [
         os.path.join(checkpoint_dir, "checkpoint_epoch_*.pth"),
         os.path.join(checkpoint_dir, "best_model_epoch_*.pth"),
+        os.path.join(checkpoint_dir, "latest.pth"),
     ]
     candidates = []
     for pat in patterns:
@@ -436,7 +438,7 @@ def _find_latest_checkpoint(checkpoint_dir: str):
     candidates.sort(key=_score)
     return candidates[-1]
 
-def train(continue_training: bool = False):
+def train(continue_training: bool = False, checkpoint_dir: str | None = None):
     print("=" * 80)
     print("HistoHDR-Net Training Script")
     print("=" * 80)
@@ -448,10 +450,12 @@ def train(continue_training: bool = False):
     print(f"Learning Rate: {LEARNING_RATE}")
     print("=" * 80)
 
+    ckpt_dir = checkpoint_dir or CHECKPOINT_DIR
+
     # Ensure checkpoint and output dirs exist before training
-    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
+    os.makedirs(ckpt_dir, exist_ok=True)
     os.makedirs(GENERATED_DIR, exist_ok=True)
-    print(f"Checkpoints will be saved to: {os.path.abspath(CHECKPOINT_DIR)}")
+    print(f"Checkpoints will be saved to: {os.path.abspath(ckpt_dir)}")
 
     hdrvdp_calculator = HDRVDPMetrics(use_real_hdrvdp=False)
     
@@ -490,9 +494,9 @@ def train(continue_training: bool = False):
     best_epoch = 0
 
     if continue_training:
-        latest_ckpt = _find_latest_checkpoint(CHECKPOINT_DIR)
+        latest_ckpt = _find_latest_checkpoint(ckpt_dir)
         if latest_ckpt is None:
-            print(f"⚠ --continue-training was set, but no checkpoints found in: {os.path.abspath(CHECKPOINT_DIR)}")
+            print(f"⚠ --continue-training was set, but no checkpoints found in: {os.path.abspath(ckpt_dir)}")
         else:
             print(f"Resuming from latest checkpoint: {latest_ckpt}")
             checkpoint = torch.load(latest_ckpt, map_location=DEVICE)
@@ -610,7 +614,7 @@ def train(continue_training: bool = False):
         # Save checkpoint at epoch 1 and every 5 epochs
         if epoch == 1 or epoch % 5 == 0:
             os.makedirs(CHECKPOINT_DIR, exist_ok=True)
-            ckpt_path = os.path.join(CHECKPOINT_DIR, f'checkpoint_epoch_{epoch}.pth')
+            ckpt_path = os.path.join(ckpt_dir, f'checkpoint_epoch_{epoch}.pth')
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
@@ -639,7 +643,7 @@ def train(continue_training: bool = False):
                     'val_ssim': val_ssim
                 }
                 
-                checkpoint_path = os.path.join(CHECKPOINT_DIR, f'best_model_epoch_{epoch}.pth')
+                checkpoint_path = os.path.join(ckpt_dir, f'best_model_epoch_{epoch}.pth')
                 torch.save(checkpoint, checkpoint_path)
                 print(f"  ✓ Saved best model (PSNR: {best_psnr:.2f}) at epoch {epoch}")
             else:
@@ -654,7 +658,7 @@ def train(continue_training: bool = False):
     print("\nTraining completed!")
     print(f"Best PSNR: {best_psnr:.2f} at epoch {best_epoch}")
     print(f"Training log saved to: {CSV_LOG_FILE}")
-    print(f"Checkpoints saved in: {CHECKPOINT_DIR}")
+    print(f"Checkpoints saved in: {ckpt_dir}")
     print(f"Generated images saved in: {GENERATED_DIR}")
 
 
@@ -665,6 +669,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Resume from the latest checkpoint in ./checkpoints (by epoch).",
     )
+    parser.add_argument(
+        "--checkpoint-dir",
+        type=str,
+        default=None,
+        help="Checkpoint directory to use (overrides default).",
+    )
     args = parser.parse_args()
-    train(continue_training=args.continue_training)
+    train(continue_training=args.continue_training, checkpoint_dir=args.checkpoint_dir)
 
