@@ -499,7 +499,20 @@ def train(continue_training: bool = False, checkpoint_dir: str | None = None):
             print(f"⚠ --continue-training was set, but no checkpoints found in: {os.path.abspath(ckpt_dir)}")
         else:
             print(f"Resuming from latest checkpoint: {latest_ckpt}")
-            checkpoint = torch.load(latest_ckpt, map_location=DEVICE)
+            try:
+                checkpoint = torch.load(latest_ckpt, map_location=DEVICE)
+            except Exception as e:
+                # PyTorch 2.6+ defaults `weights_only=True` which can fail for full training checkpoints
+                # that include optimizer/scheduler state or numpy scalars.
+                msg = str(e)
+                if "Weights only load failed" in msg or "weights_only" in msg or "UnpicklingError" in msg:
+                    print(
+                        "⚠ PyTorch refused to load this checkpoint with the default safe loader. "
+                        "Retrying with weights_only=False (ONLY do this for checkpoints you trust)."
+                    )
+                    checkpoint = torch.load(latest_ckpt, map_location=DEVICE, weights_only=False)
+                else:
+                    raise
             if "model_state_dict" in checkpoint:
                 model.load_state_dict(checkpoint["model_state_dict"])
             if "optimizer_state_dict" in checkpoint:
