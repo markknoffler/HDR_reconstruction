@@ -514,7 +514,32 @@ def train(continue_training: bool = False, checkpoint_dir: str | None = None):
                 else:
                     raise
             if "model_state_dict" in checkpoint:
-                model.load_state_dict(checkpoint["model_state_dict"])
+                try:
+                    model.load_state_dict(checkpoint["model_state_dict"])
+                except RuntimeError as e:
+                    ckpt_keys = set(checkpoint["model_state_dict"].keys())
+                    model_keys = set(model.state_dict().keys())
+                    missing = sorted(list(model_keys - ckpt_keys))
+                    unexpected = sorted(list(ckpt_keys - model_keys))
+                    print("\n" + "=" * 80)
+                    print("❌ Checkpoint is incompatible with the current model definition.")
+                    print("This usually happens when you try to resume using checkpoints from a different project/model.")
+                    print(f"- Checkpoint: {latest_ckpt}")
+                    print(f"- Missing keys in checkpoint: {len(missing)}")
+                    print(f"- Unexpected keys in checkpoint: {len(unexpected)}")
+                    if missing:
+                        print("  Examples of missing keys:")
+                        for k in missing[:10]:
+                            print(f"   - {k}")
+                    if unexpected:
+                        print("  Examples of unexpected keys:")
+                        for k in unexpected[:10]:
+                            print(f"   - {k}")
+                    print("\nFix:")
+                    print("- Point `--checkpoint-dir` to the checkpoint folder created by THIS script/model.")
+                    print("  For example, use `HistoHDRnet/checkpoints` (or omit `--checkpoint-dir` to use the default).")
+                    print("=" * 80 + "\n")
+                    raise
             if "optimizer_state_dict" in checkpoint:
                 optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
             if "scheduler_state_dict" in checkpoint:
