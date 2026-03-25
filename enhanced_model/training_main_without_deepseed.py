@@ -12,7 +12,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset, random_split
-from tqdm import tqdm``
+from tqdm import tqdm
 import argparse
 import torch.nn.functional as F
 
