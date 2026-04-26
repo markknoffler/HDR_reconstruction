@@ -1,9 +1,11 @@
 import argparse
 import torch
+from torch.utils.data import DataLoader, random_split
 
-from ..dual_decoders.cold_hdr_luminance_diffusion_decoder import GroundedHDRUNet
+from ..dual_decoders.cold_hdr_luminance_diffusion_decoder import Stage1TriEncoderDiffusionSystem
 from ..decoders.cold_hdr_diffusion_decoder import ColdHDRDiffusion
 from ..seaming_model.gan_system import SeamingGANSystem
+from ..losses.stage_composite_losses import stage3_loss
 from .common_training import (
     HDRVDPMetrics,
     compute_psnr_ssim,
@@ -11,11 +13,19 @@ from .common_training import (
     maybe_resume,
     save_checkpoint,
 )
+from .data_loader import TriGateHDRDataset
 
 
 def freeze_module(module):
     for p in module.parameters():
         p.requires_grad = False
+
+
+def build_composited_input(stage2_hdr, stage1_hdr, gate):
+    clip_mask = (1.0 - gate).clamp(0.0, 1.0)
+    composed = stage2_hdr * (1.0 - clip_mask) + stage1_hdr * clip_mask
+    seam_band = torch.clamp(torch.nn.functional.avg_pool2d(clip_mask, kernel_size=9, stride=1, padding=4), 0.0, 1.0)
+    return composed, seam_band
 
 
 def main():
@@ -25,10 +35,15 @@ def main():
     parser.add_argument("--checkpoint_dir", type=str, default="checkpoints_pipeline")
     parser.add_argument("--save_ckpt_after", type=int, default=2)
     parser.add_argument("--csv_file", type=str, default="training_metrics.csv")
+    parser.add_argument("--ldr_dir", type=str, required=False, default="")
+    parser.add_argument("--hdr_dir", type=str, required=False, default="")
+    parser.add_argument("--batch_size", type=int, default=1)
+    parser.add_argument("--sam_mask_dir", type=str, default="")
+    parser.add_argument("--max_sam_classes", type=int, default=64)
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    stage1 = GroundedHDRUNet().to(device)
+    stage1 = Stage1TriEncoderDiffusionSystem().to(device)
     stage2 = ColdHDRDiffusion().to(device)
     stage3 = SeamingGANSystem().to(device)
     hdrvdp_calculator = HDRVDPMetrics(use_real_hdrvdp=False)
@@ -40,41 +55,55 @@ def main():
         start_epoch, best_psnr, best_ssim = maybe_resume(args.checkpoint_dir, stage3.generator, optimizer)
 
     loader = []
+    if args.ldr_dir and args.hdr_dir:
+        dataset = TriGateHDRDataset(
+            args.ldr_dir,
+            args.hdr_dir,
+            mode="train",
+            sam_mask_dir=args.sam_mask_dir,
+            max_sam_classes=args.max_sam_classes,
+        )
+        train_len = max(1, int(0.8 * len(dataset)))
+        val_len = max(0, len(dataset) - train_len)
+        train_set, _ = random_split(dataset, [train_len, val_len])
+        loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True)
     for epoch in range(start_epoch, args.epochs + 1):
         stage3.train()
         running = 0.0
-        total_psnr, total_ssim, total_hdrvdp2, total_hdrvdp3, n = 0.0, 0.0, 0.0, 0.0, 0
+        total_psnr, total_ssim, total_hdrvdp2, total_hdrvdp3 = 0.0, 0.0, 0.0, 0.0
+        num_samples = 0
         for batch in loader:
             ldr = batch["ldr_image"].to(device)
             hdr_gt = batch["hdr_image"].to(device)
-            mat = batch["mat_feat"].to(device)
-            struct = batch["struct_feat"].to(device)
-            sem = [x.to(device) for x in batch["sem_feats"]]
             gate = batch["gate"].to(device)
+            sam_class_masks = batch.get("sam_class_masks", None)
+            if sam_class_masks is not None:
+                sam_class_masks = sam_class_masks.to(device)
             t = torch.randint(0, 100, (ldr.shape[0],), device=device).long()
-            gen_clip = stage1(ldr, t, mat, struct, sem)
-            base_x = stage2.restore_hdr(ldr)
-            fake = stage3.generator(base_x, gen_clip, gate)
-            loss = torch.mean((fake - hdr_gt) ** 2)
+            gen_clip, _, class_probs, _ = stage1(ldr, t, segmap=batch.get("segmap", ldr).to(device))
+            stage2_hdr = stage2.restore_hdr(ldr)
+            composed_x, seam_mask = build_composited_input(stage2_hdr, gen_clip, gate)
+            fake = stage3.generator(composed_x, gen_clip, seam_mask)
+            loss, _ = stage3_loss(fake, hdr_gt, composed_x, gate, class_masks=sam_class_masks, class_probs=class_probs)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
             running += loss.item()
             for i in range(fake.shape[0]):
-                psnr, ssim = compute_psnr_ssim(fake[i], hdr_gt[i])
+                psnr, ssim = compute_psnr_ssim(fake[i], hdr_gt[i], total_psnr, total_ssim)
                 hdrvdp2 = hdrvdp_calculator.compute_hdrvdp2(fake[i], hdr_gt[i])
                 hdrvdp3 = hdrvdp_calculator.compute_hdrvdp3(fake[i], hdr_gt[i])
                 total_psnr += psnr
                 total_ssim += ssim
                 total_hdrvdp2 += hdrvdp2
                 total_hdrvdp3 += hdrvdp3
-                n += 1
+                num_samples += 1
 
         avg_loss = running / max(1, len(loader))
-        val_psnr = total_psnr / max(1, n)
-        val_ssim = total_ssim / max(1, n)
-        val_hdrvdp2 = total_hdrvdp2 / max(1, n)
-        val_hdrvdp3 = total_hdrvdp3 / max(1, n)
+        val_psnr = total_psnr / num_samples if num_samples > 0 else 0
+        val_ssim = total_ssim / num_samples if num_samples > 0 else 0
+        val_hdrvdp2 = total_hdrvdp2 / num_samples if num_samples > 0 else 0
+        val_hdrvdp3 = total_hdrvdp3 / num_samples if num_samples > 0 else 0
         save_metrics_to_csv(args.csv_file, epoch, avg_loss, val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3)
         client_state = {
             "epoch": epoch,

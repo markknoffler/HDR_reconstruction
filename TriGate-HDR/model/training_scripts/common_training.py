@@ -14,14 +14,16 @@ def mse_loss(pred, target):
     return torch.mean((pred - target) ** 2)
 
 
-def compute_psnr_ssim(pred, gt):
+def compute_psnr_ssim(pred, gt, avg_psnr=None, avg_ssim=None):
     pred_batch = pred.unsqueeze(0)
     gt_batch = gt.unsqueeze(0)
-    mse = mse_loss(mu_tonemap(pred_batch), mu_tonemap(gt_batch))
-    psnr = 10.0 * np.log10(1.0 / (mse.item() + 1e-12))
-    generated = (np.transpose(pred.detach().cpu().numpy(), (1, 2, 0)) + 1.0) / 2.0
-    real = (np.transpose(gt.detach().cpu().numpy(), (1, 2, 0)) + 1.0) / 2.0
-    ssim = compare_ssim(generated, real, channel_axis=2, data_range=1.0)
+    mu_tonemap_gt = mu_tonemap(gt_batch)
+    mu_tonemap_pred = mu_tonemap(pred_batch)
+    mse = mse_loss(mu_tonemap_pred, mu_tonemap_gt)
+    psnr = 10 * np.log10(1 / mse.item())
+    generated = (np.transpose(pred.detach().cpu().numpy(), (1, 2, 0)) + 1) / 2.0
+    real = (np.transpose(gt.detach().cpu().numpy(), (1, 2, 0)) + 1) / 2.0
+    ssim = compare_ssim(generated, real, multichannel=True)
     return psnr, ssim
 
 
