@@ -459,6 +459,7 @@ def validate_model(model, val_loader, device, epoch, hdrvdp_calculator, save_sam
 def main():
     # Initialize options
     opt = Options().parse()
+    opt.batch_size = 1
     
     # Dataset paths
     LDR_DIR = "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/SingleHDR_training_data/HDR-Real/LDR_in"
