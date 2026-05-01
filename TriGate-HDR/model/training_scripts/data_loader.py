@@ -51,6 +51,7 @@ class TriGateHDRDataset(Dataset):
         hdr_t = torch.from_numpy(2.0 * hdr - 1.0).permute(2, 0, 1).float()
         gate = (ldr_t.max(dim=0, keepdim=True).values < 0.98).float()
         sam_class_masks = torch.zeros((self.max_sam_classes, ldr_t.shape[1], ldr_t.shape[2]), dtype=torch.float32)
+        segmap_t = ldr_t
         if self.sam_mask_dir:
             stem = os.path.splitext(ldr_name)[0]
             sam_path = os.path.join(self.sam_mask_dir, f"{stem}.npz")
@@ -66,6 +67,15 @@ class TriGateHDRDataset(Dataset):
                 num_cls = min(int(sem_map.max().item()), self.max_sam_classes)
                 for cid in range(1, num_cls + 1):
                     sam_class_masks[cid - 1] = (sem_map == cid).float()
+                sem_norm = sem_map.float() / max(1.0, float(num_cls))
+                dx = torch.abs(sem_norm[:, 1:] - sem_norm[:, :-1])
+                dy = torch.abs(sem_norm[1:, :] - sem_norm[:-1, :])
+                edge = torch.zeros_like(sem_norm)
+                edge[:, 1:] += dx
+                edge[1:, :] += dy
+                edge = torch.clamp(edge, 0.0, 1.0)
+                cls_presence = torch.clamp(sam_class_masks[:num_cls].sum(dim=0), 0.0, 1.0)
+                segmap_t = torch.stack([sem_norm, edge, cls_presence], dim=0)
             else:
                 sam_class_masks[0] = 1.0
         else:
@@ -74,7 +84,7 @@ class TriGateHDRDataset(Dataset):
         return {
             "ldr_image": ldr_t,
             "hdr_image": hdr_t,
-            "segmap": ldr_t,
+            "segmap": segmap_t,
             "gate": gate,
             "sam_class_masks": sam_class_masks,
             "ldr_path": ldr_name,

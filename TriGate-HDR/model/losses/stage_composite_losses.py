@@ -1,3 +1,5 @@
+import torch
+
 from .reconstruction_losses import gated_l2_loss
 from .distribution_losses import wasserstein_hist_loss
 from .structure_losses import structural_fidelity_loss, seam_gradient_continuity_loss
@@ -6,7 +8,8 @@ from .radiometric_losses import HybridRadiometricConsistencyLoss
 
 
 def stage1_loss(pred, target, gate, class_probs=None, class_masks=None):
-    l_w1 = wasserstein_hist_loss(pred, target, 1.0 - gate, class_probs=class_probs, class_masks=class_masks)
+    full_image_gate = torch.ones_like(gate)
+    l_w1 = wasserstein_hist_loss(pred, target, full_image_gate, class_probs=class_probs, class_masks=class_masks)
     l_sfl = structural_fidelity_loss(pred, target)
     total = l_w1 + 0.1 * l_sfl
     return total, {"w1": l_w1, "sfl": l_sfl, "loss": total}

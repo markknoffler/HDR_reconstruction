@@ -1,6 +1,5 @@
 import argparse
 import json
-import os
 from pathlib import Path
 
 import cv2
@@ -8,29 +7,12 @@ import numpy as np
 import torch
 
 
-def read_hdr_image(path: Path) -> np.ndarray:
-    if path.suffix.lower() == ".npy":
-        arr = np.load(str(path)).astype(np.float32)
-        if arr.ndim == 2:
-            arr = np.repeat(arr[..., None], 3, axis=2)
-        return arr
-    img = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+def read_ldr_image(path: Path) -> np.ndarray:
+    img = cv2.imread(str(path), cv2.IMREAD_COLOR)
     if img is None:
-        raise ValueError(f"Failed to read HDR image: {path}")
-    if img.ndim == 2:
-        img = np.repeat(img[..., None], 3, axis=2)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32)
+        raise ValueError(f"Failed to read LDR image: {path}")
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.uint8)
     return img
-
-
-def hdr_to_sam_rgb8(hdr: np.ndarray, gamma: float = 2.2) -> np.ndarray:
-    hdr = np.clip(hdr, 0.0, None)
-    p99 = np.percentile(hdr, 99.5)
-    if p99 > 0:
-        hdr = hdr / p99
-    hdr = np.clip(hdr, 0.0, 1.0)
-    ldr = np.power(hdr, 1.0 / gamma)
-    return (ldr * 255.0).astype(np.uint8)
 
 
 def build_semantic_map_from_sam_masks(mask_list, h: int, w: int):
@@ -56,7 +38,7 @@ def build_semantic_map_from_sam_masks(mask_list, h: int, w: int):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--hdr_dir", type=str, required=True)
+    parser.add_argument("--ldr_dir", type=str, required=True)
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--sam_checkpoint", type=str, required=True)
     parser.add_argument("--model_type", type=str, default="vit_h")
@@ -68,7 +50,7 @@ def main():
 
     from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
 
-    hdr_dir = Path(args.hdr_dir)
+    ldr_dir = Path(args.ldr_dir)
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "metadata").mkdir(parents=True, exist_ok=True)
@@ -82,18 +64,17 @@ def main():
         stability_score_thresh=args.stability_score_thresh,
     )
 
-    hdr_files = sorted([p for p in hdr_dir.iterdir() if p.suffix.lower() in [".hdr", ".exr", ".npy"]])
-    if not hdr_files:
-        print(f"No HDR files found in: {hdr_dir}")
+    ldr_files = sorted([p for p in ldr_dir.iterdir() if p.suffix.lower() in [".png", ".jpg", ".jpeg"]])
+    if not ldr_files:
+        print(f"No LDR files found in: {ldr_dir}")
         return
 
-    for idx, hdr_path in enumerate(hdr_files, start=1):
-        hdr = read_hdr_image(hdr_path)
-        rgb8 = hdr_to_sam_rgb8(hdr)
+    for idx, ldr_path in enumerate(ldr_files, start=1):
+        rgb8 = read_ldr_image(ldr_path)
         masks = mask_generator.generate(rgb8)
 
         semantic_map, metadata = build_semantic_map_from_sam_masks(masks, rgb8.shape[0], rgb8.shape[1])
-        stem = hdr_path.stem
+        stem = ldr_path.stem
         np.savez_compressed(
             out_dir / f"{stem}.npz",
             semantic_map=semantic_map.astype(np.uint16),
@@ -102,8 +83,8 @@ def main():
             num_classes=np.int32(int(semantic_map.max())),
         )
         with open(out_dir / "metadata" / f"{stem}.json", "w", encoding="utf-8") as f:
-            json.dump({"file": hdr_path.name, "num_classes": int(semantic_map.max()), "segments": metadata}, f, indent=2)
-        print(f"[{idx}/{len(hdr_files)}] Saved SAM masks for {hdr_path.name}")
+            json.dump({"file": ldr_path.name, "num_classes": int(semantic_map.max()), "segments": metadata}, f, indent=2)
+        print(f"[{idx}/{len(ldr_files)}] Saved SAM masks for {ldr_path.name}")
 
     print(f"Done. SAM masks saved at: {out_dir}")
 
