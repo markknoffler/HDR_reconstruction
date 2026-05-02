@@ -3,3 +3,87 @@ WRN 2026-05-01T18:18:11.215 ui.52395   tui_handle_term_mode:239: TUI: terminal m
 WRN 2026-05-01T18:18:11.215 ui.52395   tui_handle_term_mode:226: TUI: terminal mode 2027 unavailable, state 0
 WRN 2026-05-01T18:18:11.215 ui.52395   tui_handle_term_mode:239: TUI: terminal mode 2031 detected, state 2
 WRN 2026-05-01T18:18:11.215 ui.52395   tui_handle_term_mode:239: TUI: terminal mode 2048 detected, state 2
+WRN 2026-05-02T11:31:18.914 ui.52101   tui_handle_term_mode:226: TUI: terminal mode 69 unavailable, state 0
+WRN 2026-05-02T11:31:18.914 ui.52101   tui_handle_term_mode:239: TUI: terminal mode 2026 detected, state 2
+WRN 2026-05-02T11:31:18.914 ui.52101   tui_handle_term_mode:226: TUI: terminal mode 2027 unavailable, state 0
+WRN 2026-05-02T11:31:18.914 ui.52101   tui_handle_term_mode:239: TUI: terminal mode 2031 detected, state 2
+WRN 2026-05-02T11:31:18.914 ui.52101   tui_handle_term_mode:239: TUI: terminal mode 2048 detected, state 2
+ERR 2026-05-02T11:59:59.519 nvim.52102.0 decor_provider_error:29: Error in decoration provider "conceal_line" (ns=nvim.treesitter.highlighter):
+Lua: .../neovim/0.12.2/share/nvim/runtime/lua/vim/treesitter.lua:196: attempt to call method 'range' (a nil value)
+stack traceback:
+	.../neovim/0.12.2/share/nvim/runtime/lua/vim/treesitter.lua:196: in function 'get_range'
+	.../neovim/0.12.2/share/nvim/runtime/lua/vim/treesitter.lua:231: in function 'get_node_text'
+	...nvim-treesitter/lua/nvim-treesitter/query_predicates.lua:141: in function 'handler'
+	...m/0.12.2/share/nvim/runtime/lua/vim/treesitter/query.lua:868: in function '_apply_directives'
+	...m/0.12.2/share/nvim/runtime/lua/vim/treesitter/query.lua:1089: in function '(for generator)'
+	...2/share/nvim/runtime/lua/vim/treesitter/languagetree.lua:1123: in function '_get_injections'
+	...2/share/nvim/runtime/lua/vim/treesitter/languagetree.lua:690: in function '_parse'
+	...2/share/nvim/runtime/lua/vim/treesitter/languagetree.lua:639: in function 'parse'
+	....2/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:529: in function <....2/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:521>
+	[C]: at 0x0104ad7134
+	[C]: in function 'pcall'
+	.../share/nvim/lazy/LazyVim/lua/lazyvim/config/autocmds.lua:48: in function <.../share/nvim/lazy/LazyVim/lua/lazyvim/config/autocmds.lua:38>
+	[C]: in function 'nvim_exec2'
+	vim/_core/editor.lua: in function <vim/_core/editor.lua:0>
+	[C]: in function 'pcall'
+	...hare/nvim/lazy/neo-tree.nvim/lua/neo-tree/utils/init.lua:856: in function 'open_file'
+	...y/neo-tree.nvim/lua/neo-tree/sources/common/commands.lua:843: in function 'open'
+	...y/neo-tree.nvim/lua/neo-tree/sources/common/commands.lua:865: in function 'open_with_cmd'
+	...y/neo-tree.nvim/lua/neo-tree/sources/common/commands.lua:873: in function 'open'
+	...o-tree.nvim/lua/neo-tree/sources/filesystem/commands.lua:214: in function <...o-tree.nvim/lua/neo-tree/sources/filesystem/commands.lua:213>
+ERR 2026-05-02T11:59:59.520 nvim.52102.0 decor_provider_error:29: Error in decoration provider "conceal_line" (ns=nvim.treesitter.highlighter):
+Lua: .../neovim/0.12.2/share/nvim/runtime/lua/vim/treesitter.lua:196: attempt to call method 'range' (a nil value)
+stack traceback:
+	.../neovim/0.12.2/share/nvim/runtime/lua/vim/treesitter.lua:196: in function 'get_range'
+	.../neovim/0.12.2/share/nvim/runtime/lua/vim/treesitter.lua:231: in function 'get_node_text'
+	...nvim-treesitter/lua/nvim-treesitter/query_predicates.lua:141: in function 'handler'
+	...m/0.12.2/share/nvim/runtime/lua/vim/treesitter/query.lua:868: in function '_apply_directives'
+	...m/0.12.2/share/nvim/runtime/lua/vim/treesitter/query.lua:1089: in function '(for generator)'
+	...2/share/nvim/runtime/lua/vim/treesitter/languagetree.lua:1123: in function '_get_injections'
+	...2/share/nvim/runtime/lua/vim/treesitter/languagetree.lua:690: in function '_parse'
+	...2/share/nvim/runtime/lua/vim/treesitter/languagetree.lua:639: in function 'parse'
+	....2/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:529: in function <....2/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:521>
+	[C]: at 0x0104ad7134
+	[C]: in function 'pcall'
+	.../share/nvim/lazy/LazyVim/lua/lazyvim/config/autocmds.lua:48: in function <.../share/nvim/lazy/LazyVim/lua/lazyvim/config/autocmds.lua:38>
+	[C]: in function 'nvim_exec2'
+	vim/_core/editor.lua: in function <vim/_core/editor.lua:0>
+	[C]: in function 'pcall'
+	...hare/nvim/lazy/neo-tree.nvim/lua/neo-tree/utils/init.lua:856: in function 'open_file'
+	...y/neo-tree.nvim/lua/neo-tree/sources/common/commands.lua:843: in function 'open'
+	...y/neo-tree.nvim/lua/neo-tree/sources/common/commands.lua:865: in function 'open_with_cmd'
+	...y/neo-tree.nvim/lua/neo-tree/sources/common/commands.lua:873: in function 'open'
+	...o-tree.nvim/lua/neo-tree/sources/filesystem/commands.lua:214: in function <...o-tree.nvim/lua/neo-tree/sources/filesystem/commands.lua:213>
+ERR 2026-05-02T11:59:59.529 nvim.52102.0 decor_provider_error:29: Error in decoration provider "conceal_line" (ns=nvim.treesitter.highlighter):
+Lua: .../neovim/0.12.2/share/nvim/runtime/lua/vim/treesitter.lua:196: attempt to call method 'range' (a nil value)
+stack traceback:
+	.../neovim/0.12.2/share/nvim/runtime/lua/vim/treesitter.lua:196: in function 'get_range'
+	.../neovim/0.12.2/share/nvim/runtime/lua/vim/treesitter.lua:231: in function 'get_node_text'
+	...nvim-treesitter/lua/nvim-treesitter/query_predicates.lua:141: in function 'handler'
+	...m/0.12.2/share/nvim/runtime/lua/vim/treesitter/query.lua:868: in function '_apply_directives'
+	...m/0.12.2/share/nvim/runtime/lua/vim/treesitter/query.lua:1089: in function '(for generator)'
+	...2/share/nvim/runtime/lua/vim/treesitter/languagetree.lua:1123: in function '_get_injections'
+	...2/share/nvim/runtime/lua/vim/treesitter/languagetree.lua:690: in function '_parse'
+	...2/share/nvim/runtime/lua/vim/treesitter/languagetree.lua:639: in function 'parse'
+	....2/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:529: in function <....2/share/nvim/runtime/lua/vim/treesitter/highlighter.lua:521>
+	[C]: at 0x0104ad7134
+	[C]: in function 'pcall'
+	.../share/nvim/lazy/LazyVim/lua/lazyvim/config/autocmds.lua:48: in function <.../share/nvim/lazy/LazyVim/lua/lazyvim/config/autocmds.lua:38>
+	[C]: in function 'nvim_exec2'
+	vim/_core/editor.lua: in function <vim/_core/editor.lua:0>
+	[C]: in function 'pcall'
+	...hare/nvim/lazy/neo-tree.nvim/lua/neo-tree/utils/init.lua:856: in function 'open_file'
+	...y/neo-tree.nvim/lua/neo-tree/sources/common/commands.lua:843: in function 'open'
+	...y/neo-tree.nvim/lua/neo-tree/sources/common/commands.lua:865: in function 'open_with_cmd'
+	...y/neo-tree.nvim/lua/neo-tree/sources/common/commands.lua:873: in function 'open'
+	...o-tree.nvim/lua/neo-tree/sources/filesystem/commands.lua:214: in function <...o-tree.nvim/lua/neo-tree/sources/filesystem/commands.lua:213>
+WRN 2026-05-02T12:08:55.938 ui.94765   tui_handle_term_mode:226: TUI: terminal mode 69 unavailable, state 0
+WRN 2026-05-02T12:08:55.938 ui.94765   tui_handle_term_mode:239: TUI: terminal mode 2026 detected, state 2
+WRN 2026-05-02T12:08:55.938 ui.94765   tui_handle_term_mode:226: TUI: terminal mode 2027 unavailable, state 0
+WRN 2026-05-02T12:08:55.938 ui.94765   tui_handle_term_mode:239: TUI: terminal mode 2031 detected, state 2
+WRN 2026-05-02T12:08:55.938 ui.94765   tui_handle_term_mode:239: TUI: terminal mode 2048 detected, state 2
+WRN 2026-05-02T12:53:36.949 ui.32269   tui_handle_term_mode:226: TUI: terminal mode 69 unavailable, state 0
+WRN 2026-05-02T12:53:36.949 ui.32269   tui_handle_term_mode:239: TUI: terminal mode 2026 detected, state 2
+WRN 2026-05-02T12:53:36.949 ui.32269   tui_handle_term_mode:226: TUI: terminal mode 2027 unavailable, state 0
+WRN 2026-05-02T12:53:36.949 ui.32269   tui_handle_term_mode:239: TUI: terminal mode 2031 detected, state 2
+WRN 2026-05-02T12:53:36.949 ui.32269   tui_handle_term_mode:239: TUI: terminal mode 2048 detected, state 2
