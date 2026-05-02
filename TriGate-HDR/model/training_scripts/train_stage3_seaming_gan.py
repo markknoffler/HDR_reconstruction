@@ -1,6 +1,7 @@
 import argparse
 import torch
 import torch.optim as optim
+import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
 
 from ..seaming_model.gan_system import SeamingGANSystem
@@ -14,7 +15,10 @@ from .data_loader import TriGateHDRDataset
 def build_composited_input(stage2_hdr, stage1_hdr, gate):
     clip_mask = (1.0 - gate).clamp(0.0, 1.0)
     composed = stage2_hdr * (1.0 - clip_mask) + stage1_hdr * clip_mask
-    seam_band = torch.clamp(torch.nn.functional.avg_pool2d(clip_mask, kernel_size=9, stride=1, padding=4), 0.0, 1.0)
+    dilated = F.max_pool2d(clip_mask, kernel_size=17, stride=1, padding=8)
+    eroded = -F.max_pool2d(-clip_mask, kernel_size=9, stride=1, padding=4)
+    seam_band = (dilated - eroded).clamp(0.0, 1.0)
+    seam_band = torch.maximum(seam_band, clip_mask)
     return composed, seam_band, clip_mask
 
 
@@ -31,6 +35,7 @@ def main():
     parser.add_argument("--stage2_ckpt", type=str, default="")
     parser.add_argument("--sam_mask_dir", type=str, default="")
     parser.add_argument("--max_sam_classes", type=int, default=64)
+    parser.add_argument("--outside_lock_weight", type=float, default=0.5)
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     system = SeamingGANSystem().to(device)
@@ -77,16 +82,17 @@ def main():
                 t = torch.randint(0, 100, (ldr.shape[0],), device=device).long()
                 gen_clip, _, class_probs, _ = frozen_stage1(ldr, t, segmap=batch.get("segmap", ldr).to(device))
                 stage2_hdr = frozen_stage2.restore_hdr(ldr)
-                composed_x, seam_mask, clip_mask = build_composited_input(stage2_hdr, gen_clip, gate)
+                composed_x, seam_mask, _ = build_composited_input(stage2_hdr, gen_clip, gate)
             fake, fg, fs = system(composed_x, gen_clip, seam_mask)
-            rg, rs = system.discriminator(gt, gate)
+            rg, rs = system.discriminator(gt, seam_mask)
             d_loss = system.d_hinge_loss(rg, fg.detach()) + system.d_hinge_loss(rs, fs.detach())
             opt_d.zero_grad(set_to_none=True)
             d_loss.backward()
             opt_d.step()
             fake, fg, fs = system(composed_x, gen_clip, seam_mask)
             recon, _ = stage3_loss(fake, gt, composed_x, gate, class_masks=sam_class_masks, class_probs=class_probs)
-            g_loss = recon + 0.05 * (system.g_hinge_loss(fg) + system.g_hinge_loss(fs))
+            outside_lock = torch.mean(torch.abs((1.0 - seam_mask) * (fake - composed_x)))
+            g_loss = recon + 0.05 * (system.g_hinge_loss(fg) + system.g_hinge_loss(fs)) + args.outside_lock_weight * outside_lock
             opt_g.zero_grad(set_to_none=True)
             g_loss.backward()
             opt_g.step()

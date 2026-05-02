@@ -1,5 +1,6 @@
 import argparse
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
 
 from ..dual_decoders.cold_hdr_luminance_diffusion_decoder import Stage1TriEncoderDiffusionSystem
@@ -24,7 +25,10 @@ def freeze_module(module):
 def build_composited_input(stage2_hdr, stage1_hdr, gate):
     clip_mask = (1.0 - gate).clamp(0.0, 1.0)
     composed = stage2_hdr * (1.0 - clip_mask) + stage1_hdr * clip_mask
-    seam_band = torch.clamp(torch.nn.functional.avg_pool2d(clip_mask, kernel_size=9, stride=1, padding=4), 0.0, 1.0)
+    dilated = F.max_pool2d(clip_mask, kernel_size=17, stride=1, padding=8)
+    eroded = -F.max_pool2d(-clip_mask, kernel_size=9, stride=1, padding=4)
+    seam_band = (dilated - eroded).clamp(0.0, 1.0)
+    seam_band = torch.maximum(seam_band, clip_mask)
     return composed, seam_band
 
 
@@ -40,6 +44,7 @@ def main():
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--sam_mask_dir", type=str, default="")
     parser.add_argument("--max_sam_classes", type=int, default=64)
+    parser.add_argument("--outside_lock_weight", type=float, default=0.5)
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -84,7 +89,9 @@ def main():
             stage2_hdr = stage2.restore_hdr(ldr)
             composed_x, seam_mask = build_composited_input(stage2_hdr, gen_clip, gate)
             fake = stage3.generator(composed_x, gen_clip, seam_mask)
-            loss, _ = stage3_loss(fake, hdr_gt, composed_x, gate, class_masks=sam_class_masks, class_probs=class_probs)
+            recon_loss, _ = stage3_loss(fake, hdr_gt, composed_x, gate, class_masks=sam_class_masks, class_probs=class_probs)
+            outside_lock = torch.mean(torch.abs((1.0 - seam_mask) * (fake - composed_x)))
+            loss = recon_loss + args.outside_lock_weight * outside_lock
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
