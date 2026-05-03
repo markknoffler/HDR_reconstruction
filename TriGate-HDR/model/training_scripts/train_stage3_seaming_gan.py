@@ -3,6 +3,7 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
+from torch.amp import autocast, GradScaler
 
 from ..seaming_model.gan_system import SeamingGANSystem
 from ..losses.stage_composite_losses import stage3_loss
@@ -35,6 +36,8 @@ def main():
     parser.add_argument("--stage2_ckpt", type=str, default="")
     parser.add_argument("--sam_mask_dir", type=str, default="")
     parser.add_argument("--max_sam_classes", type=int, default=64)
+    parser.add_argument("--max_dim", type=int, default=0)
+    parser.add_argument("--amp", action="store_true")
     parser.add_argument("--outside_lock_weight", type=float, default=0.5)
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -57,6 +60,8 @@ def main():
         param.requires_grad = False
     opt_g = optim.Adam(system.generator.parameters(), lr=args.lr_g, betas=(0.5, 0.999))
     opt_d = optim.Adam(system.discriminator.parameters(), lr=args.lr_d, betas=(0.5, 0.999))
+    scaler_g = GradScaler("cuda", enabled=args.amp and device.type == "cuda")
+    scaler_d = GradScaler("cuda", enabled=args.amp and device.type == "cuda")
     loader = []
     if args.ldr_dir and args.hdr_dir:
         dataset = TriGateHDRDataset(
@@ -65,6 +70,7 @@ def main():
             mode="train",
             sam_mask_dir=args.sam_mask_dir,
             max_sam_classes=args.max_sam_classes,
+            max_dim=args.max_dim,
         )
         train_len = max(1, int(0.8 * len(dataset)))
         val_len = max(0, len(dataset) - train_len)
@@ -80,22 +86,27 @@ def main():
                 sam_class_masks = sam_class_masks.to(device)
             with torch.no_grad():
                 t = torch.randint(0, 100, (ldr.shape[0],), device=device).long()
-                gen_clip, _, class_probs, _ = frozen_stage1(ldr, t, segmap=batch.get("segmap", ldr).to(device))
-                stage2_hdr = frozen_stage2.restore_hdr(ldr)
+                with autocast("cuda", enabled=args.amp and device.type == "cuda"):
+                    gen_clip, _, class_probs, _ = frozen_stage1(ldr, t, segmap=batch.get("segmap", ldr).to(device))
+                    stage2_hdr = frozen_stage2.restore_hdr(ldr)
                 composed_x, seam_mask, _ = build_composited_input(stage2_hdr, gen_clip, gate)
-            fake, fg, fs = system(composed_x, gen_clip, seam_mask)
-            rg, rs = system.discriminator(gt, seam_mask)
-            d_loss = system.d_hinge_loss(rg, fg.detach()) + system.d_hinge_loss(rs, fs.detach())
             opt_d.zero_grad(set_to_none=True)
-            d_loss.backward()
-            opt_d.step()
-            fake, fg, fs = system(composed_x, gen_clip, seam_mask)
-            recon, _ = stage3_loss(fake, gt, composed_x, gate, class_masks=sam_class_masks, class_probs=class_probs)
-            outside_lock = torch.mean(torch.abs((1.0 - seam_mask) * (fake - composed_x)))
-            g_loss = recon + 0.05 * (system.g_hinge_loss(fg) + system.g_hinge_loss(fs)) + args.outside_lock_weight * outside_lock
+            with autocast("cuda", enabled=args.amp and device.type == "cuda"):
+                fake, fg, fs = system(composed_x, gen_clip, seam_mask)
+                rg, rs = system.discriminator(gt, seam_mask)
+                d_loss = system.d_hinge_loss(rg, fg.detach()) + system.d_hinge_loss(rs, fs.detach())
+            scaler_d.scale(d_loss).backward()
+            scaler_d.step(opt_d)
+            scaler_d.update()
             opt_g.zero_grad(set_to_none=True)
-            g_loss.backward()
-            opt_g.step()
+            with autocast("cuda", enabled=args.amp and device.type == "cuda"):
+                fake, fg, fs = system(composed_x, gen_clip, seam_mask)
+                recon, _ = stage3_loss(fake, gt, composed_x, gate, class_masks=sam_class_masks, class_probs=class_probs)
+                outside_lock = torch.mean(torch.abs((1.0 - seam_mask) * (fake - composed_x)))
+                g_loss = recon + 0.05 * (system.g_hinge_loss(fg) + system.g_hinge_loss(fs)) + args.outside_lock_weight * outside_lock
+            scaler_g.scale(g_loss).backward()
+            scaler_g.step(opt_g)
+            scaler_g.update()
         save_checkpoint(args.checkpoint_dir, f"epoch_{epoch}", {"epoch": epoch, "generator": system.generator.state_dict(), "discriminator": system.discriminator.state_dict(), "opt_g": opt_g.state_dict(), "opt_d": opt_d.state_dict()})
 
 

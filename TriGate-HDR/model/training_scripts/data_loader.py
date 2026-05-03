@@ -7,12 +7,13 @@ import torch.nn.functional as F
 
 
 class TriGateHDRDataset(Dataset):
-    def __init__(self, ldr_dir, hdr_dir, mode="train", sam_mask_dir="", max_sam_classes=64):
+    def __init__(self, ldr_dir, hdr_dir, mode="train", sam_mask_dir="", max_sam_classes=64, max_dim=0):
         self.ldr_dir = ldr_dir
         self.hdr_dir = hdr_dir
         self.mode = mode
         self.sam_mask_dir = sam_mask_dir
         self.max_sam_classes = max_sam_classes
+        self.max_dim = max_dim
         ldr_files = sorted([f for f in os.listdir(ldr_dir) if f.lower().endswith((".png", ".jpg", ".jpeg"))])
         self.pairs = []
         for ldr_file in ldr_files:
@@ -42,6 +43,15 @@ class TriGateHDRDataset(Dataset):
         ldr = cv2.imread(ldr_path)
         ldr = cv2.cvtColor(ldr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         hdr = self._load_hdr(hdr_path)
+        if self.max_dim and self.max_dim > 0:
+            h, w = ldr.shape[:2]
+            cur_max = max(h, w)
+            if cur_max > self.max_dim:
+                scale = float(self.max_dim) / float(cur_max)
+                new_w = max(1, int(round(w * scale)))
+                new_h = max(1, int(round(h * scale)))
+                ldr = cv2.resize(ldr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                hdr = cv2.resize(hdr, (new_w, new_h), interpolation=cv2.INTER_AREA)
         hdr = np.clip(hdr, 0.0, None)
         hdr_max = float(hdr.max())
         if hdr_max > 0:

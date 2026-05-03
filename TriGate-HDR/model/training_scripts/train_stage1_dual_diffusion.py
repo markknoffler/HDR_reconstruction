@@ -2,6 +2,7 @@ import argparse
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
+from torch.amp import autocast, GradScaler
 
 from ..dual_decoders.cold_hdr_luminance_diffusion_decoder import Stage1TriEncoderDiffusionSystem
 from ..losses.stage_composite_losses import stage1_loss
@@ -41,11 +42,14 @@ def main():
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--sam_mask_dir", type=str, default="")
     parser.add_argument("--max_sam_classes", type=int, default=64)
+    parser.add_argument("--max_dim", type=int, default=0)
+    parser.add_argument("--amp", action="store_true")
     parser.add_argument("--continue_train", action="store_true")
     args = parser.parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = Stage1TriEncoderDiffusionSystem().to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    scaler = GradScaler("cuda", enabled=args.amp and device.type == "cuda")
     start_epoch = 1
     if args.continue_train:
         start_epoch, _, _ = maybe_resume(args.checkpoint_dir, model, optimizer)
@@ -58,6 +62,7 @@ def main():
             mode="train",
             sam_mask_dir=args.sam_mask_dir,
             max_sam_classes=args.max_sam_classes,
+            max_dim=args.max_dim,
         )
         train_len = max(1, int(0.8 * len(dataset)))
         val_len = max(0, len(dataset) - train_len)
@@ -65,7 +70,29 @@ def main():
         loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True)
 
     for epoch in range(start_epoch, args.epochs + 1):
-        train_loss = train_one_epoch(model, loader, optimizer, device) if loader else 0.0
+        if loader:
+            model.train()
+            running = 0.0
+            for batch in loader:
+                ldr = batch["ldr_image"].to(device)
+                hdr = batch["hdr_image"].to(device)
+                segmap = batch.get("segmap", ldr).to(device)
+                sam_class_masks = batch.get("sam_class_masks", None)
+                if sam_class_masks is not None:
+                    sam_class_masks = sam_class_masks.to(device)
+                t = torch.randint(0, 100, (ldr.shape[0],), device=device).long()
+                with autocast("cuda", enabled=args.amp and device.type == "cuda"):
+                    pred, gate, class_probs, aux = model(ldr, t, segmap=segmap)
+                    loss, _ = stage1_loss(pred, hdr, gate, class_masks=sam_class_masks, class_probs=class_probs)
+                    loss = loss + 0.01 * kl_codebook_loss(aux["mus"], aux["logvars"])
+                optimizer.zero_grad(set_to_none=True)
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+                running += loss.item()
+            train_loss = running / max(1, len(loader))
+        else:
+            train_loss = 0.0
         save_checkpoint(
             args.checkpoint_dir,
             f"epoch_{epoch}",
