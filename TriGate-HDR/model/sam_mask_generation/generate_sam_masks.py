@@ -46,6 +46,11 @@ def main():
     parser.add_argument("--points_per_side", type=int, default=32)
     parser.add_argument("--pred_iou_thresh", type=float, default=0.86)
     parser.add_argument("--stability_score_thresh", type=float, default=0.92)
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Skip each LDR if output_dir/<stem>.npz already exists (reuse after interruption).",
+    )
     args = parser.parse_args()
 
     from segment_anything import SamAutomaticMaskGenerator, sam_model_registry
@@ -69,12 +74,19 @@ def main():
         print(f"No LDR files found in: {ldr_dir}")
         return
 
+    done = skipped = 0
     for idx, ldr_path in enumerate(ldr_files, start=1):
+        stem = ldr_path.stem
+        out_npz = out_dir / f"{stem}.npz"
+        if args.resume and out_npz.is_file():
+            skipped += 1
+            print(f"[{idx}/{len(ldr_files)}] resume: skip {ldr_path.name} ({out_npz.name} exists)")
+            continue
+
         rgb8 = read_ldr_image(ldr_path)
         masks = mask_generator.generate(rgb8)
 
         semantic_map, metadata = build_semantic_map_from_sam_masks(masks, rgb8.shape[0], rgb8.shape[1])
-        stem = ldr_path.stem
         np.savez_compressed(
             out_dir / f"{stem}.npz",
             semantic_map=semantic_map.astype(np.uint16),
@@ -84,9 +96,10 @@ def main():
         )
         with open(out_dir / "metadata" / f"{stem}.json", "w", encoding="utf-8") as f:
             json.dump({"file": ldr_path.name, "num_classes": int(semantic_map.max()), "segments": metadata}, f, indent=2)
-        print(f"[{idx}/{len(ldr_files)}] Saved SAM masks for {ldr_path.name}")
+        done += 1
+        print(f"[{idx}/{len(ldr_files)}] saved {ldr_path.name}")
 
-    print(f"Done. SAM masks saved at: {out_dir}")
+    print(f"Done. output_dir={out_dir} | newly written={done} | skipped={skipped}")
 
 
 if __name__ == "__main__":
