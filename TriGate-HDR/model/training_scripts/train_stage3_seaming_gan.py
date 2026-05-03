@@ -4,6 +4,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
 from torch.amp import autocast, GradScaler
+from tqdm import tqdm
 
 from ..seaming_model.gan_system import SeamingGANSystem
 from ..losses.stage_composite_losses import stage3_loss
@@ -77,7 +78,10 @@ def main():
         train_set, _ = random_split(dataset, [train_len, val_len])
         loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True)
     for epoch in range(1, args.epochs + 1):
-        for batch in loader:
+        running_d = 0.0
+        running_g = 0.0
+        pbar = tqdm(loader, desc=f"Stage3 Epoch {epoch}/{args.epochs}", leave=True)
+        for step, batch in enumerate(pbar, start=1):
             ldr = batch["ldr_image"].to(device)
             gate = batch["gate"].to(device)
             gt = batch["hdr_image"].to(device)
@@ -98,6 +102,7 @@ def main():
             scaler_d.scale(d_loss).backward()
             scaler_d.step(opt_d)
             scaler_d.update()
+            running_d += d_loss.item()
             opt_g.zero_grad(set_to_none=True)
             with autocast("cuda", enabled=args.amp and device.type == "cuda"):
                 fake, fg, fs = system(composed_x, gen_clip, seam_mask)
@@ -107,6 +112,9 @@ def main():
             scaler_g.scale(g_loss).backward()
             scaler_g.step(opt_g)
             scaler_g.update()
+            running_g += g_loss.item()
+            pbar.set_postfix(d_loss=f"{running_d / step:.4f}", g_loss=f"{running_g / step:.4f}")
+        print(f"[Stage3] epoch={epoch} d_loss={running_d / max(1, len(loader)):.6f} g_loss={running_g / max(1, len(loader)):.6f}")
         save_checkpoint(args.checkpoint_dir, f"epoch_{epoch}", {"epoch": epoch, "generator": system.generator.state_dict(), "discriminator": system.discriminator.state_dict(), "opt_g": opt_g.state_dict(), "opt_d": opt_d.state_dict()})
 
 

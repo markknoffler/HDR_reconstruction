@@ -3,6 +3,7 @@ import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
 from torch.amp import autocast, GradScaler
+from tqdm import tqdm
 
 from ..dual_decoders.cold_hdr_luminance_diffusion_decoder import Stage1TriEncoderDiffusionSystem
 from ..losses.stage_composite_losses import stage1_loss
@@ -73,7 +74,8 @@ def main():
         if loader:
             model.train()
             running = 0.0
-            for batch in loader:
+            pbar = tqdm(loader, desc=f"Stage1 Epoch {epoch}/{args.epochs}", leave=True)
+            for step, batch in enumerate(pbar, start=1):
                 ldr = batch["ldr_image"].to(device)
                 hdr = batch["hdr_image"].to(device)
                 segmap = batch.get("segmap", ldr).to(device)
@@ -90,9 +92,11 @@ def main():
                 scaler.step(optimizer)
                 scaler.update()
                 running += loss.item()
+                pbar.set_postfix(loss=f"{running / step:.4f}")
             train_loss = running / max(1, len(loader))
         else:
             train_loss = 0.0
+        print(f"[Stage1] epoch={epoch} train_loss={train_loss:.6f}")
         save_checkpoint(
             args.checkpoint_dir,
             f"epoch_{epoch}",
