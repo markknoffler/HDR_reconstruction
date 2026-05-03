@@ -47,7 +47,7 @@ class SegMaskEncoder(nn.Module):
 
 
 class HorizontalTriStreamFusion(nn.Module):
-    def __init__(self, target_ch, in_mat, in_struct, in_sem, in_mask, t_dim):
+    def __init__(self, target_ch, in_mat, in_struct, in_sem, in_mask, t_dim, attn_max_tokens=1024):
         super().__init__()
         self.mat_proj = nn.Conv2d(in_mat, target_ch, 1)
         self.struct_proj = nn.Conv2d(in_struct, target_ch, 1)
@@ -61,6 +61,7 @@ class HorizontalTriStreamFusion(nn.Module):
         self.time_fc = nn.Linear(t_dim, target_ch * 4)
         self.mix = nn.Conv2d(target_ch * 4, target_ch, 1)
         self.out = nn.Conv2d(target_ch, target_ch, 1)
+        self.attn_max_tokens = attn_max_tokens
 
     def forward(self, x, t_emb, mat, struct, sem, mask):
         b, c, h, w = x.shape
@@ -69,16 +70,33 @@ class HorizontalTriStreamFusion(nn.Module):
         sem = F.interpolate(self.sem_proj(sem), size=(h, w), mode="bilinear", align_corners=False)
         mask = F.interpolate(self.mask_proj(mask), size=(h, w), mode="bilinear", align_corners=False)
 
-        q = self.q_mat(mat).view(b, c, -1).transpose(1, 2)
-        ks = self.k_struct(struct).view(b, c, -1)
-        vs = self.v_struct(struct).view(b, c, -1).transpose(1, 2)
-        km = self.k_sem(sem).view(b, c, -1)
-        vm = self.v_sem(sem).view(b, c, -1).transpose(1, 2)
+        # Full token-token attention is O((HW)^2) and can OOM on 12GB GPUs.
+        # Compute attention on an adaptive low-res grid, then upsample.
+        token_limit = max(1, int(self.attn_max_tokens))
+        pool_h = h
+        pool_w = w
+        if h * w > token_limit:
+            scale = (token_limit / float(h * w)) ** 0.5
+            pool_h = max(1, int(round(h * scale)))
+            pool_w = max(1, int(round(w * scale)))
+
+        mat_a = F.interpolate(mat, size=(pool_h, pool_w), mode="bilinear", align_corners=False)
+        struct_a = F.interpolate(struct, size=(pool_h, pool_w), mode="bilinear", align_corners=False)
+        sem_a = F.interpolate(sem, size=(pool_h, pool_w), mode="bilinear", align_corners=False)
+
+        q = self.q_mat(mat_a).view(b, c, -1).transpose(1, 2)
+        ks = self.k_struct(struct_a).view(b, c, -1)
+        vs = self.v_struct(struct_a).view(b, c, -1).transpose(1, 2)
+        km = self.k_sem(sem_a).view(b, c, -1)
+        vm = self.v_sem(sem_a).view(b, c, -1).transpose(1, 2)
 
         attn_s = torch.softmax(torch.bmm(q, ks) / (c ** 0.5), dim=-1)
         attn_m = torch.softmax(torch.bmm(q, km) / (c ** 0.5), dim=-1)
-        mix_struct = torch.bmm(attn_s, vs).transpose(1, 2).reshape(b, c, h, w)
-        mix_sem = torch.bmm(attn_m, vm).transpose(1, 2).reshape(b, c, h, w)
+        mix_struct = torch.bmm(attn_s, vs).transpose(1, 2).reshape(b, c, pool_h, pool_w)
+        mix_sem = torch.bmm(attn_m, vm).transpose(1, 2).reshape(b, c, pool_h, pool_w)
+        if pool_h != h or pool_w != w:
+            mix_struct = F.interpolate(mix_struct, size=(h, w), mode="bilinear", align_corners=False)
+            mix_sem = F.interpolate(mix_sem, size=(h, w), mode="bilinear", align_corners=False)
 
         gates = torch.sigmoid(self.time_fc(t_emb)).view(b, 4, c, 1, 1)
         fused = torch.cat([gates[:, 0] * mat, gates[:, 1] * mix_struct, gates[:, 2] * mix_sem, gates[:, 3] * mask], dim=1)
