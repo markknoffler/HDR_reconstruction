@@ -155,3 +155,37 @@ def save_checkpoint(checkpoint_dir, tag, payload):
     torch.save(payload, path)
     torch.save(payload, os.path.join(checkpoint_dir, "latest.pt"))
 
+
+def save_best_checkpoint(checkpoint_dir, payload):
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    torch.save(payload, os.path.join(checkpoint_dir, "best.pt"))
+
+
+def load_checkpoint(path, device):
+    return torch.load(path, map_location=device)
+
+
+def add_subset_args(parser):
+    parser.add_argument("--val_ratio", type=float, default=0.2, help="Fraction held out for validation (never trained).")
+    parser.add_argument("--split_seed", type=int, default=42, help="Seed for reproducible train/val split.")
+    parser.add_argument(
+        "--subset_fraction",
+        type=float,
+        default=1.0,
+        help="Train on 1/N of train split; use 0.2 for 20%% packets (5 packets total).",
+    )
+    parser.add_argument(
+        "--subset_packet",
+        type=int,
+        default=0,
+        help="Which train packet to use when subset_fraction<1 (0..N-1).",
+    )
+    parser.add_argument("--val_export_count", type=int, default=10, help="Random val images to export after training.")
+    parser.add_argument(
+        "--val_export_dir",
+        type=str,
+        default="",
+        help="Directory for exported val previews; default <checkpoint_dir>/val_exports",
+    )
+    parser.add_argument("--val_export_seed", type=int, default=123, help="Seed for picking val export images.")
+

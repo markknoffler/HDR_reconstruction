@@ -1,40 +1,21 @@
 import argparse
+import os
+
 import torch
 import torch.optim as optim
-from torch.utils.data import DataLoader, random_split
 from torch.amp import autocast, GradScaler
 from tqdm import tqdm
 
 from ..dual_decoders.cold_hdr_luminance_diffusion_decoder import Stage1TriEncoderDiffusionSystem
 from ..losses.stage_composite_losses import stage1_loss
 from ..losses.codebook_losses import kl_codebook_loss
-from .common_training import maybe_resume, save_checkpoint
-from .data_loader import TriGateHDRDataset
-
-
-def train_one_epoch(model, loader, optimizer, device):
-    model.train()
-    running = 0.0
-    for batch in loader:
-        ldr = batch["ldr_image"].to(device)
-        hdr = batch["hdr_image"].to(device)
-        segmap = batch.get("segmap", ldr).to(device)
-        sam_class_masks = batch.get("sam_class_masks", None)
-        if sam_class_masks is not None:
-            sam_class_masks = sam_class_masks.to(device)
-        t = torch.randint(0, 100, (ldr.shape[0],), device=device).long()
-        pred, gate, class_probs, aux = model(ldr, t, segmap=segmap)
-        loss, _ = stage1_loss(pred, hdr, gate, class_masks=sam_class_masks, class_probs=class_probs)
-        loss = loss + 0.01 * kl_codebook_loss(aux["mus"], aux["logvars"])
-        optimizer.zero_grad(set_to_none=True)
-        loss.backward()
-        optimizer.step()
-        running += loss.item()
-    return running / max(1, len(loader))
+from .common_training import add_subset_args, load_checkpoint, maybe_resume, save_best_checkpoint, save_checkpoint, save_metrics_to_csv
+from .dataset_splits import build_dataloaders
+from .val_export import export_stage1_samples, pick_val_export_indices, validate_stage1
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Train Stage-1 tri-encoder diffusion.")
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--lr", type=float, default=2e-4)
     parser.add_argument("--checkpoint_dir", type=str, default="checkpoints_stage1")
@@ -46,64 +27,101 @@ def main():
     parser.add_argument("--max_dim", type=int, default=0)
     parser.add_argument("--amp", action="store_true")
     parser.add_argument("--continue_train", action="store_true")
+    add_subset_args(parser)
     args = parser.parse_args()
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = Stage1TriEncoderDiffusionSystem().to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     scaler = GradScaler("cuda", enabled=args.amp and device.type == "cuda")
-    start_epoch = 1
-    if args.continue_train:
-        start_epoch, _, _ = maybe_resume(args.checkpoint_dir, model, optimizer)
 
-    loader = []
+    start_epoch = 1
+    best_psnr, best_ssim = 0.0, 0.0
+    if args.continue_train:
+        start_epoch, best_psnr, best_ssim = maybe_resume(args.checkpoint_dir, model, optimizer)
+
+    train_loader, val_loader, full_dataset, val_indices = ([], None, None, [])
     if args.ldr_dir and args.hdr_dir:
-        dataset = TriGateHDRDataset(
+        train_loader, val_loader, full_dataset, val_indices = build_dataloaders(
             args.ldr_dir,
             args.hdr_dir,
-            mode="train",
+            args.batch_size,
             sam_mask_dir=args.sam_mask_dir,
             max_sam_classes=args.max_sam_classes,
             max_dim=args.max_dim,
+            val_ratio=args.val_ratio,
+            split_seed=args.split_seed,
+            subset_fraction=args.subset_fraction,
+            subset_packet=args.subset_packet,
+            checkpoint_dir=args.checkpoint_dir,
         )
-        train_len = max(1, int(0.8 * len(dataset)))
-        val_len = max(0, len(dataset) - train_len)
-        train_set, _ = random_split(dataset, [train_len, val_len])
-        loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True)
+        print(
+            f"[Stage1] train={len(train_loader.dataset)} val={len(val_loader.dataset) if val_loader else 0} "
+            f"packet={args.subset_packet} fraction={args.subset_fraction}"
+        )
 
+    csv_path = os.path.join(args.checkpoint_dir, "training_metrics.csv")
     for epoch in range(start_epoch, args.epochs + 1):
-        if loader:
-            model.train()
-            running = 0.0
-            pbar = tqdm(loader, desc=f"Stage1 Epoch {epoch}/{args.epochs}", leave=True)
-            for step, batch in enumerate(pbar, start=1):
-                ldr = batch["ldr_image"].to(device)
-                hdr = batch["hdr_image"].to(device)
-                segmap = batch.get("segmap", ldr).to(device)
-                sam_class_masks = batch.get("sam_class_masks", None)
-                if sam_class_masks is not None:
-                    sam_class_masks = sam_class_masks.to(device)
-                t = torch.randint(0, 100, (ldr.shape[0],), device=device).long()
-                with autocast("cuda", enabled=args.amp and device.type == "cuda"):
-                    pred, gate, class_probs, aux = model(ldr, t, segmap=segmap)
-                    loss, _ = stage1_loss(pred, hdr, gate, class_masks=sam_class_masks, class_probs=class_probs)
-                    loss = loss + 0.01 * kl_codebook_loss(aux["mus"], aux["logvars"])
-                optimizer.zero_grad(set_to_none=True)
-                scaler.scale(loss).backward()
-                scaler.step(optimizer)
-                scaler.update()
-                running += loss.item()
-                pbar.set_postfix(loss=f"{running / step:.4f}")
-            train_loss = running / max(1, len(loader))
-        else:
-            train_loss = 0.0
-        print(f"[Stage1] epoch={epoch} train_loss={train_loss:.6f}")
-        save_checkpoint(
-            args.checkpoint_dir,
-            f"epoch_{epoch}",
-            {"epoch": epoch, "model": model.state_dict(), "optimizer": optimizer.state_dict(), "train_loss": train_loss},
-        )
+        model.train()
+        running = 0.0
+        pbar = tqdm(train_loader, desc=f"Stage1 Epoch {epoch}/{args.epochs}", leave=True)
+        for step, batch in enumerate(pbar, start=1):
+            ldr = batch["ldr_image"].to(device)
+            hdr = batch["hdr_image"].to(device)
+            segmap = batch.get("segmap", ldr).to(device)
+            sam_class_masks = batch.get("sam_class_masks")
+            if sam_class_masks is not None:
+                sam_class_masks = sam_class_masks.to(device)
+            t = torch.randint(0, 100, (ldr.shape[0],), device=device).long()
+            with autocast("cuda", enabled=args.amp and device.type == "cuda"):
+                pred, gate, class_probs, aux = model(ldr, t, segmap=segmap)
+                loss, _ = stage1_loss(pred, hdr, gate, class_masks=sam_class_masks, class_probs=class_probs)
+                loss = loss + 0.01 * kl_codebook_loss(aux["mus"], aux["logvars"])
+            optimizer.zero_grad(set_to_none=True)
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            running += loss.item()
+            pbar.set_postfix(loss=f"{running / step:.4f}")
+
+        train_loss = running / max(1, len(train_loader))
+        val_psnr, val_ssim = (0.0, 0.0)
+        if val_loader is not None:
+            val_psnr, val_ssim = validate_stage1(model, val_loader, device, amp=args.amp)
+
+        save_metrics_to_csv(csv_path, epoch, train_loss, val_psnr, val_ssim)
+        payload = {
+            "epoch": epoch,
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "train_loss": train_loss,
+            "val_psnr": val_psnr,
+            "val_ssim": val_ssim,
+            "best_val_psnr": best_psnr,
+            "best_val_ssim": best_ssim,
+        }
+        save_checkpoint(args.checkpoint_dir, f"epoch_{epoch}", payload)
+
+        if val_psnr > best_psnr:
+            best_psnr, best_ssim = val_psnr, val_ssim
+            payload["best_val_psnr"] = best_psnr
+            payload["best_val_ssim"] = best_ssim
+            save_best_checkpoint(args.checkpoint_dir, payload)
+            print(f"[Stage1] new best epoch={epoch} psnr={best_psnr:.4f} ssim={best_ssim:.4f}")
+
+        print(f"[Stage1] epoch={epoch} train_loss={train_loss:.6f} val_psnr={val_psnr:.4f} val_ssim={val_ssim:.4f}")
+
+    if full_dataset is not None and val_indices:
+        best_path = os.path.join(args.checkpoint_dir, "best.pt")
+        ckpt_path = best_path if os.path.isfile(best_path) else os.path.join(args.checkpoint_dir, "latest.pt")
+        if os.path.isfile(ckpt_path):
+            ckpt = load_checkpoint(ckpt_path, device)
+            model.load_state_dict(ckpt["model"], strict=False)
+            export_dir = args.val_export_dir or os.path.join(args.checkpoint_dir, "val_exports")
+            export_idx = pick_val_export_indices(val_indices, args.val_export_count, args.val_export_seed)
+            export_stage1_samples(model, full_dataset, export_idx, export_dir, device, amp=args.amp)
+            print(f"[Stage1] exported {len(export_idx)} val images to {export_dir} using {ckpt_path}")
 
 
 if __name__ == "__main__":
     main()
-
