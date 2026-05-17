@@ -16,8 +16,37 @@ def mse_loss(pred, target):
     return torch.mean((pred - target) ** 2)
 
 
+def _safe_ssim(generated, real):
+    """SSIM with skimage API compatibility and small-image win_size handling."""
+    generated = np.clip(generated, 0.0, 1.0)
+    real = np.clip(real, 0.0, 1.0)
+    min_side = min(generated.shape[0], generated.shape[1])
+    if min_side < 3:
+        return 0.0
+    win_size = min(7, min_side)
+    if win_size % 2 == 0:
+        win_size = max(3, win_size - 1)
+    channel_axis = -1 if generated.ndim == 3 else None
+    try:
+        return float(
+            compare_ssim(
+                generated,
+                real,
+                channel_axis=channel_axis,
+                win_size=win_size,
+                data_range=1.0,
+            )
+        )
+    except TypeError:
+        # Older scikit-image
+        kwargs = {"win_size": win_size, "data_range": 1.0}
+        if generated.ndim == 3:
+            kwargs["multichannel"] = True
+        return float(compare_ssim(generated, real, **kwargs))
+
+
 def compute_psnr_ssim(pred, gt):
-    """Match ARThdrNet/m_training.py compute_psnr_ssim exactly."""
+    """PSNR-mu + SSIM (ARThdrNet/m_training.py PSNR; robust SSIM for smoke/small crops)."""
     pred_batch = pred.unsqueeze(0)
     gt_batch = gt.unsqueeze(0)
     mu_tonemap_gt = mu_tonemap(gt_batch)
@@ -26,7 +55,7 @@ def compute_psnr_ssim(pred, gt):
     psnr = 10 * np.log10(1 / mse.item())
     generated = (np.transpose(pred.cpu().numpy(), (1, 2, 0)) + 1) / 2.0
     real = (np.transpose(gt.cpu().numpy(), (1, 2, 0)) + 1) / 2.0
-    ssim = compare_ssim(generated, real, multichannel=True)
+    ssim = _safe_ssim(generated, real)
     return psnr, ssim
 
 
