@@ -1,5 +1,6 @@
 import argparse
 import os
+import time
 
 import torch
 import torch.optim as optim
@@ -9,9 +10,17 @@ from tqdm import tqdm
 from ..dual_decoders.cold_hdr_luminance_diffusion_decoder import Stage1TriEncoderDiffusionSystem
 from ..losses.stage_composite_losses import stage1_loss
 from ..losses.codebook_losses import kl_codebook_loss
-from .common_training import add_subset_args, load_checkpoint, maybe_resume, save_best_checkpoint, save_checkpoint, save_metrics_to_csv
+from .common_training import (
+    HDRVDPMetrics,
+    add_subset_args,
+    maybe_resume,
+    print_epoch_summary,
+    save_best_checkpoint,
+    save_checkpoint,
+    save_metrics_to_csv,
+)
 from .dataset_splits import build_dataloaders
-from .val_export import export_stage1_samples, pick_val_export_indices, validate_stage1
+from .val_export import make_stage1_predictor, validate_model_mtraining
 
 
 def main():
@@ -31,18 +40,26 @@ def main():
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    os.makedirs(args.checkpoint_dir, exist_ok=True)
+    validation_root = args.validation_results_dir or os.path.join(args.checkpoint_dir, "validation_results")
+    os.makedirs(validation_root, exist_ok=True)
+
     model = Stage1TriEncoderDiffusionSystem().to(device)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     scaler = GradScaler("cuda", enabled=args.amp and device.type == "cuda")
+    hdrvdp_calculator = HDRVDPMetrics(use_real_hdrvdp=False)
 
     start_epoch = 1
     best_psnr, best_ssim = 0.0, 0.0
+    best_hdrvdp2, best_hdrvdp3 = 0.0, 0.0
     if args.continue_train:
-        start_epoch, best_psnr, best_ssim = maybe_resume(args.checkpoint_dir, model, optimizer)
+        start_epoch, best_psnr, best_ssim, best_hdrvdp2, best_hdrvdp3 = maybe_resume(
+            args.checkpoint_dir, model, optimizer
+        )
 
-    train_loader, val_loader, full_dataset, val_indices = ([], None, None, [])
+    train_loader, val_loader = None, None
     if args.ldr_dir and args.hdr_dir:
-        train_loader, val_loader, full_dataset, val_indices = build_dataloaders(
+        train_loader, val_loader, _, _ = build_dataloaders(
             args.ldr_dir,
             args.hdr_dir,
             args.batch_size,
@@ -61,10 +78,13 @@ def main():
         )
 
     csv_path = os.path.join(args.checkpoint_dir, "training_metrics.csv")
+    predict_fn = make_stage1_predictor(model)
+
     for epoch in range(start_epoch, args.epochs + 1):
+        epoch_start = time.time()
         model.train()
         running = 0.0
-        pbar = tqdm(train_loader, desc=f"Stage1 Epoch {epoch}/{args.epochs}", leave=True)
+        pbar = tqdm(train_loader, desc=f"Training Epoch {epoch}/{args.epochs}", leave=True)
         for step, batch in enumerate(pbar, start=1):
             ldr = batch["ldr_image"].to(device)
             hdr = batch["hdr_image"].to(device)
@@ -85,11 +105,30 @@ def main():
             pbar.set_postfix(loss=f"{running / step:.4f}")
 
         train_loss = running / max(1, len(train_loader))
-        val_psnr, val_ssim = (0.0, 0.0)
-        if val_loader is not None:
-            val_psnr, val_ssim = validate_stage1(model, val_loader, device, amp=args.amp)
+        epoch_time = time.time() - epoch_start
 
-        save_metrics_to_csv(csv_path, epoch, train_loss, val_psnr, val_ssim)
+        val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3 = 0.0, 0.0, 0.0, 0.0
+        if val_loader is not None:
+            print("Validating...")
+            model.eval()
+            val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3 = validate_model_mtraining(
+                val_loader,
+                device,
+                epoch,
+                hdrvdp_calculator,
+                predict_fn,
+                validation_root,
+                save_samples=args.save_val_samples_each_epoch,
+                max_samples=args.val_export_count,
+                amp=args.amp,
+            )
+            model.train()
+
+        save_metrics_to_csv(csv_path, epoch, train_loss, val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3)
+        print_epoch_summary(
+            epoch, args.epochs, train_loss, val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3, epoch_time
+        )
+
         payload = {
             "epoch": epoch,
             "model": model.state_dict(),
@@ -97,30 +136,31 @@ def main():
             "train_loss": train_loss,
             "val_psnr": val_psnr,
             "val_ssim": val_ssim,
+            "val_hdrvdp2": val_hdrvdp2,
+            "val_hdrvdp3": val_hdrvdp3,
             "best_val_psnr": best_psnr,
             "best_val_ssim": best_ssim,
+            "best_val_hdrvdp2": best_hdrvdp2,
+            "best_val_hdrvdp3": best_hdrvdp3,
         }
-        save_checkpoint(args.checkpoint_dir, f"epoch_{epoch}", payload)
 
         if val_psnr > best_psnr:
             best_psnr, best_ssim = val_psnr, val_ssim
+            best_hdrvdp2, best_hdrvdp3 = val_hdrvdp2, val_hdrvdp3
             payload["best_val_psnr"] = best_psnr
             payload["best_val_ssim"] = best_ssim
+            payload["best_val_hdrvdp2"] = best_hdrvdp2
+            payload["best_val_hdrvdp3"] = best_hdrvdp3
             save_best_checkpoint(args.checkpoint_dir, payload)
-            print(f"[Stage1] new best epoch={epoch} psnr={best_psnr:.4f} ssim={best_ssim:.4f}")
+            save_checkpoint(args.checkpoint_dir, f"best_epoch_{epoch}", payload)
+            print(f"  Saved best model with PSNR: {val_psnr:.4f}")
 
-        print(f"[Stage1] epoch={epoch} train_loss={train_loss:.6f} val_psnr={val_psnr:.4f} val_ssim={val_ssim:.4f}")
+        if epoch % args.save_ckpt_after == 0:
+            save_checkpoint(args.checkpoint_dir, f"epoch_{epoch}", payload)
+            print(f"  Saved checkpoint at epoch {epoch}")
 
-    if full_dataset is not None and val_indices:
-        best_path = os.path.join(args.checkpoint_dir, "best.pt")
-        ckpt_path = best_path if os.path.isfile(best_path) else os.path.join(args.checkpoint_dir, "latest.pt")
-        if os.path.isfile(ckpt_path):
-            ckpt = load_checkpoint(ckpt_path, device)
-            model.load_state_dict(ckpt["model"], strict=False)
-            export_dir = args.val_export_dir or os.path.join(args.checkpoint_dir, "val_exports")
-            export_idx = pick_val_export_indices(val_indices, args.val_export_count, args.val_export_seed)
-            export_stage1_samples(model, full_dataset, export_idx, export_dir, device, amp=args.amp)
-            print(f"[Stage1] exported {len(export_idx)} val images to {export_dir} using {ckpt_path}")
+        if args.save_val_samples_each_epoch:
+            print(f"  Validation samples: {os.path.join(validation_root, f'epoch_{epoch}')}")
 
 
 if __name__ == "__main__":

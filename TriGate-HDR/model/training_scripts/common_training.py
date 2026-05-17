@@ -1,5 +1,7 @@
 import csv
 import os
+
+import cv2
 import numpy as np
 import torch
 from skimage.metrics import structural_similarity as compare_ssim
@@ -14,17 +16,75 @@ def mse_loss(pred, target):
     return torch.mean((pred - target) ** 2)
 
 
-def compute_psnr_ssim(pred, gt, avg_psnr=None, avg_ssim=None):
+def compute_psnr_ssim(pred, gt):
+    """Match ARThdrNet/m_training.py compute_psnr_ssim exactly."""
     pred_batch = pred.unsqueeze(0)
     gt_batch = gt.unsqueeze(0)
     mu_tonemap_gt = mu_tonemap(gt_batch)
     mu_tonemap_pred = mu_tonemap(pred_batch)
     mse = mse_loss(mu_tonemap_pred, mu_tonemap_gt)
     psnr = 10 * np.log10(1 / mse.item())
-    generated = (np.transpose(pred.detach().cpu().numpy(), (1, 2, 0)) + 1) / 2.0
-    real = (np.transpose(gt.detach().cpu().numpy(), (1, 2, 0)) + 1) / 2.0
+    generated = (np.transpose(pred.cpu().numpy(), (1, 2, 0)) + 1) / 2.0
+    real = (np.transpose(gt.cpu().numpy(), (1, 2, 0)) + 1) / 2.0
     ssim = compare_ssim(generated, real, multichannel=True)
     return psnr, ssim
+
+
+def write_hdr(hdr_image, path):
+    """Writing HDR image in radiance (.hdr) format (ARThdrNet/utils.py)."""
+    norm_image = cv2.cvtColor(hdr_image, cv2.COLOR_BGR2RGB)
+    with open(path, "wb") as f:
+        norm_image = (norm_image - norm_image.min()) / (norm_image.max() - norm_image.min())
+        f.write(b"#?RADIANCE\n# Made with Python & Numpy\nFORMAT=32-bit_rle_rgbe\n\n")
+        f.write(b"-Y %d +X %d\n" % (norm_image.shape[0], norm_image.shape[1]))
+        brightest = np.maximum(np.maximum(norm_image[..., 0], norm_image[..., 1]), norm_image[..., 2])
+        mantissa = np.zeros_like(brightest)
+        exponent = np.zeros_like(brightest)
+        np.frexp(brightest, mantissa, exponent)
+        scaled_mantissa = mantissa * 255.0 / brightest
+        rgbe = np.zeros((norm_image.shape[0], norm_image.shape[1], 4), dtype=np.uint8)
+        rgbe[..., 0:3] = np.around(norm_image[..., 0:3] * scaled_mantissa[..., None])
+        rgbe[..., 3] = np.around(exponent + 128)
+        rgbe.flatten().tofile(f)
+        f.close()
+
+
+def save_hdr_image(img_tensor, batch, path):
+    """Match ARThdrNet/m_training.py save_hdr_image."""
+    img = img_tensor.data[batch].cpu().float().numpy()
+    img = np.transpose(img, (1, 2, 0))
+    write_hdr(img.astype(np.float32), path)
+
+
+def save_ldr_image(img_tensor, batch, path):
+    """Match ARThdrNet/m_training.py save_ldr_image (expects HDR tensors in [-1, 1])."""
+    img = img_tensor.data[batch].cpu().float().numpy()
+    img = 255 * (np.transpose(img, (1, 2, 0)) + 1) / 2
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    cv2.imwrite(path, img)
+
+
+def save_ldr_image_01(img_tensor, batch, path):
+    """TriGate dataloader LDR is in [0, 1]."""
+    img = img_tensor.data[batch].cpu().float().numpy()
+    img = 255 * np.clip(np.transpose(img, (1, 2, 0)), 0.0, 1.0)
+    img = cv2.cvtColor(img.astype(np.uint8), cv2.COLOR_RGB2BGR)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    cv2.imwrite(path, img)
+
+
+def print_epoch_summary(epoch, total_epochs, train_loss, val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3, epoch_time):
+    """Match ARThdrNet/m_training.py epoch summary printout."""
+    print(f"\n{'=' * 60}")
+    print(f"Epoch {epoch}/{total_epochs} Summary")
+    print(f"{'=' * 60}")
+    print(f"  Training Loss    : {train_loss:.6f}")
+    print(f"  Validation PSNR  : {val_psnr:.4f} dB")
+    print(f"  Validation SSIM  : {val_ssim:.4f}")
+    print(f"  HDR-VDP-2 Score  : {val_hdrvdp2:.4f}")
+    print(f"  HDR-VDP-3 Score  : {val_hdrvdp3:.4f}")
+    print(f"  Epoch Time       : {epoch_time:.2f} seconds")
+    print(f"{'=' * 60}")
 
 
 class HDRVDPMetrics:
@@ -142,11 +202,17 @@ def save_metrics_to_csv(csv_path, epoch, train_loss, val_psnr, val_ssim, val_hdr
 def maybe_resume(checkpoint_dir, model, optimizer):
     latest = os.path.join(checkpoint_dir, "latest.pt")
     if not os.path.exists(latest):
-        return 1, 0.0, 0.0
+        return 1, 0.0, 0.0, 0.0, 0.0
     ckpt = torch.load(latest, map_location="cpu")
     model.load_state_dict(ckpt["model"])
     optimizer.load_state_dict(ckpt["optimizer"])
-    return ckpt["epoch"] + 1, ckpt.get("best_val_psnr", 0.0), ckpt.get("best_val_ssim", 0.0)
+    return (
+        ckpt["epoch"] + 1,
+        ckpt.get("best_val_psnr", 0.0),
+        ckpt.get("best_val_ssim", 0.0),
+        ckpt.get("best_val_hdrvdp2", 0.0),
+        ckpt.get("best_val_hdrvdp3", 0.0),
+    )
 
 
 def save_checkpoint(checkpoint_dir, tag, payload):
@@ -188,4 +254,28 @@ def add_subset_args(parser):
         help="Directory for exported val previews; default <checkpoint_dir>/val_exports",
     )
     parser.add_argument("--val_export_seed", type=int, default=123, help="Seed for picking val export images.")
+    parser.add_argument(
+        "--validation_results_dir",
+        type=str,
+        default="",
+        help="Per-epoch validation outputs; default <checkpoint_dir>/validation_results",
+    )
+    parser.add_argument(
+        "--save_ckpt_after",
+        type=int,
+        default=1,
+        help="Save epoch checkpoint every N epochs (validation still runs every epoch).",
+    )
+    parser.add_argument(
+        "--save_val_samples_each_epoch",
+        action="store_true",
+        default=True,
+        help="Save up to 10 val LDR/pred/gt files every epoch (ARThdrNet style).",
+    )
+    parser.add_argument(
+        "--no_save_val_samples_each_epoch",
+        action="store_false",
+        dest="save_val_samples_each_epoch",
+        help="Disable per-epoch validation image dumps.",
+    )
 
