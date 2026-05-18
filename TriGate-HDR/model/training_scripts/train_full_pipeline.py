@@ -50,7 +50,18 @@ def main():
     parser.add_argument("--skip_stage2", action="store_true")
     parser.add_argument("--skip_stage3", action="store_true")
     parser.add_argument("--continue_train", action="store_true")
+    parser.add_argument("--smoke_test", action="store_true")
+    parser.add_argument("--max_train_samples", type=int, default=0)
+    parser.add_argument("--max_val_samples", type=int, default=0)
     args = parser.parse_args()
+    if args.smoke_test:
+        if args.max_train_samples <= 0:
+            args.max_train_samples = 6
+        if args.max_val_samples <= 0:
+            args.max_val_samples = 4
+        if args.max_dim <= 0:
+            args.max_dim = 256
+        args.val_export_count = min(args.val_export_count, args.max_val_samples)
 
     exp_dir = os.path.join(args.ckpt_root, args.experiment_name)
     s1_dir = os.path.join(exp_dir, "stage1")
@@ -79,11 +90,17 @@ def main():
         str(args.split_seed),
         "--val_export_count",
         str(args.val_export_count),
+        "--max_train_samples",
+        str(args.max_train_samples),
+        "--max_val_samples",
+        str(args.max_val_samples),
     ]
     if args.amp:
         common.append("--amp")
     if args.continue_train:
         common.append("--continue_train")
+    if args.smoke_test:
+        common.append("--smoke_test")
 
     os.chdir(defaults["repo"])
     env = os.environ.copy()

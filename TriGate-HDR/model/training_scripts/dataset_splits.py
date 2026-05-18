@@ -79,6 +79,8 @@ def build_dataloaders(
     subset_packet: int = 0,
     checkpoint_dir: str = "",
     num_workers: int = 0,
+    max_train_samples: int = 0,
+    max_val_samples: int = 0,
 ):
     full_dataset = TriGateHDRDataset(
         ldr_dir,
@@ -96,6 +98,11 @@ def build_dataloaders(
         subset_packet=subset_packet,
     )
 
+    if max_train_samples > 0:
+        packet_idx = packet_idx[:max_train_samples]
+    if max_val_samples > 0:
+        val_idx = val_idx[:max_val_samples]
+
     train_set = Subset(full_dataset, packet_idx)
     val_set = Subset(full_dataset, val_idx) if val_idx else None
 
@@ -111,6 +118,8 @@ def build_dataloaders(
                 "split_seed": split_seed,
                 "subset_fraction": subset_fraction,
                 "subset_packet": subset_packet,
+                "max_train_samples": max_train_samples,
+                "max_val_samples": max_val_samples,
             },
         )
 

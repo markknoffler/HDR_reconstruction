@@ -45,18 +45,34 @@ def _safe_ssim(generated, real):
         return float(compare_ssim(generated, real, **kwargs))
 
 
+def _finite_metric(x, default=0.0):
+    x = float(x)
+    return x if np.isfinite(x) else default
+
+
+def sanitize_hdr_tensor(t):
+    """FP32 + clamp before metrics (AMP can produce inf/nan)."""
+    return torch.nan_to_num(t.float(), nan=0.0, posinf=1.0, neginf=-1.0).clamp(-1.0, 1.0)
+
+
 def compute_psnr_ssim(pred, gt):
     """PSNR-mu + SSIM (ARThdrNet/m_training.py PSNR; robust SSIM for smoke/small crops)."""
+    pred = sanitize_hdr_tensor(pred)
+    gt = sanitize_hdr_tensor(gt)
     pred_batch = pred.unsqueeze(0)
     gt_batch = gt.unsqueeze(0)
     mu_tonemap_gt = mu_tonemap(gt_batch)
     mu_tonemap_pred = mu_tonemap(pred_batch)
     mse = mse_loss(mu_tonemap_pred, mu_tonemap_gt)
-    psnr = 10 * np.log10(1 / mse.item())
+    mse_val = float(mse.item())
+    if not np.isfinite(mse_val) or mse_val <= 1e-12:
+        psnr = 60.0 if mse_val <= 1e-12 else 0.0
+    else:
+        psnr = 10.0 * np.log10(1.0 / mse_val)
     generated = (np.transpose(pred.cpu().numpy(), (1, 2, 0)) + 1) / 2.0
     real = (np.transpose(gt.cpu().numpy(), (1, 2, 0)) + 1) / 2.0
     ssim = _safe_ssim(generated, real)
-    return psnr, ssim
+    return _finite_metric(psnr), _finite_metric(ssim)
 
 
 def write_hdr(hdr_image, path):
@@ -219,11 +235,11 @@ def save_metrics_to_csv(csv_path, epoch, train_loss, val_psnr, val_ssim, val_hdr
         writer.writerow(
             {
                 "epoch": epoch,
-                "train_loss": f"{train_loss:.6f}",
-                "val_psnr": f"{val_psnr:.4f}",
-                "val_ssim": f"{val_ssim:.4f}",
-                "val_hdrvdp2": f"{val_hdrvdp2:.4f}",
-                "val_hdrvdp3": f"{val_hdrvdp3:.4f}",
+                "train_loss": f"{_finite_metric(train_loss):.6f}",
+                "val_psnr": f"{_finite_metric(val_psnr):.4f}",
+                "val_ssim": f"{_finite_metric(val_ssim):.4f}",
+                "val_hdrvdp2": f"{_finite_metric(val_hdrvdp2):.4f}",
+                "val_hdrvdp3": f"{_finite_metric(val_hdrvdp3):.4f}",
             }
         )
 
@@ -307,4 +323,35 @@ def add_subset_args(parser):
         dest="save_val_samples_each_epoch",
         help="Disable per-epoch validation image dumps.",
     )
+    parser.add_argument(
+        "--smoke_test",
+        action="store_true",
+        help="Tiny overfit run: 6 train + 4 val images, max_dim=256 (fast sanity check).",
+    )
+    parser.add_argument(
+        "--max_train_samples",
+        type=int,
+        default=0,
+        help="Cap training images (0=no cap). smoke_test sets 6 if unset.",
+    )
+    parser.add_argument(
+        "--max_val_samples",
+        type=int,
+        default=0,
+        help="Cap validation images (0=no cap). smoke_test sets 4 if unset.",
+    )
+
+
+def apply_smoke_test_args(args):
+    if not getattr(args, "smoke_test", False):
+        return args
+    if args.max_train_samples <= 0:
+        args.max_train_samples = 6
+    if args.max_val_samples <= 0:
+        args.max_val_samples = 4
+    if args.max_dim <= 0:
+        args.max_dim = 256
+    if args.val_export_count > args.max_val_samples:
+        args.val_export_count = args.max_val_samples
+    return args
 

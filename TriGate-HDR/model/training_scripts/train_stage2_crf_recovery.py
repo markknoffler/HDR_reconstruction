@@ -13,6 +13,7 @@ from ..losses.radiometric_losses import HybridRadiometricConsistencyLoss
 from .common_training import (
     HDRVDPMetrics,
     add_subset_args,
+    apply_smoke_test_args,
     maybe_resume,
     print_epoch_summary,
     save_best_checkpoint,
@@ -36,6 +37,7 @@ def main():
     parser.add_argument("--continue_train", action="store_true")
     add_subset_args(parser)
     args = parser.parse_args()
+    args = apply_smoke_test_args(args)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     os.makedirs(args.checkpoint_dir, exist_ok=True)
@@ -68,10 +70,12 @@ def main():
             subset_fraction=args.subset_fraction,
             subset_packet=args.subset_packet,
             checkpoint_dir=args.checkpoint_dir,
+            max_train_samples=args.max_train_samples,
+            max_val_samples=args.max_val_samples,
         )
         print(
             f"[Stage2] train={len(train_loader.dataset)} val={len(val_loader.dataset) if val_loader else 0} "
-            f"packet={args.subset_packet} fraction={args.subset_fraction}"
+            f"smoke_test={args.smoke_test} packet={args.subset_packet} fraction={args.subset_fraction}"
         )
 
     csv_path = os.path.join(args.checkpoint_dir, "training_metrics.csv")

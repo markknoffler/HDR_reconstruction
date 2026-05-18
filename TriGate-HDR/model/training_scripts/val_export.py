@@ -11,7 +11,13 @@ import torch.nn.functional as F
 from torch.amp import autocast
 from tqdm import tqdm
 
-from .common_training import compute_psnr_ssim, save_hdr_image, save_ldr_image_01
+from .common_training import (
+    _finite_metric,
+    compute_psnr_ssim,
+    sanitize_hdr_tensor,
+    save_hdr_image,
+    save_ldr_image_01,
+)
 
 
 def pick_val_export_indices(val_indices: List[int], count: int, seed: int) -> List[int]:
@@ -57,6 +63,8 @@ def validate_model_mtraining(
 
         with autocast("cuda", enabled=amp and device.type == "cuda"):
             hdr_pred = predict_hdr(batch, input_ldr, ground_truth, device)
+        hdr_pred = sanitize_hdr_tensor(hdr_pred)
+        ground_truth = sanitize_hdr_tensor(ground_truth)
 
         if save_samples and sample_count < max_samples:
             for i in range(min(hdr_pred.shape[0], max_samples - sample_count)):
@@ -71,11 +79,16 @@ def validate_model_mtraining(
         for i in range(hdr_pred.shape[0]):
             pred_img = hdr_pred[i]
             gt_img = ground_truth[i]
+            if not torch.isfinite(pred_img).all():
+                print("[WARN] non-finite prediction skipped in metrics")
+                continue
             psnr, ssim = compute_psnr_ssim(pred_img, gt_img)
-            total_psnr += psnr
-            total_ssim += ssim
-            total_hdrvdp2 += hdrvdp_calculator.compute_hdrvdp2(pred_img, gt_img)
-            total_hdrvdp3 += hdrvdp_calculator.compute_hdrvdp3(pred_img, gt_img)
+            h2 = hdrvdp_calculator.compute_hdrvdp2(pred_img, gt_img)
+            h3 = hdrvdp_calculator.compute_hdrvdp3(pred_img, gt_img)
+            total_psnr += _finite_metric(psnr)
+            total_ssim += _finite_metric(ssim)
+            total_hdrvdp2 += _finite_metric(h2)
+            total_hdrvdp3 += _finite_metric(h3)
             num_samples += 1
 
     if num_samples == 0:
