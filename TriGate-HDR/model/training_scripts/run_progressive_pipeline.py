@@ -51,7 +51,7 @@ def main():
     stage1 = Stage1TriEncoderDiffusionSystem().to(device)
     stage2 = ColdHDRDiffusion().to(device)
     stage3 = SeamingGANSystem().to(device)
-    hdrvdp_calculator = HDRVDPMetrics(use_real_hdrvdp=False)
+    hdrvdp_calculator = HDRVDPMetrics()
     freeze_module(stage1)
     freeze_module(stage2)
     optimizer = torch.optim.Adam(stage3.generator.parameters(), lr=2e-4)

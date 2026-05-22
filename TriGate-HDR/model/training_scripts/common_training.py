@@ -134,95 +134,62 @@ def print_epoch_summary(epoch, total_epochs, train_loss, val_psnr, val_ssim, val
 
 class HDRVDPMetrics:
     """
-    HDR-VDP metric calculator using FovVideoVDP (modern successor to HDR-VDP-2/3).
-    Maintains exact same interface as ARThdrNet/m_training.py.
+    Official HDR-VDP-2 (Q, 0-100) and HDR-VDP-3 quality (Q_JOD) via bundled
+    SourceForge releases and Octave. Matches HistoHDR-Net / ICIP evaluation:
+    metrics on linear HDR (cd/m^2), not PU21/FovVideoVDP proxies.
     """
 
-    def __init__(self, use_real_hdrvdp=False):
-        self.use_real_hdrvdp = use_real_hdrvdp
-        self.fvvdp_model = None
+    def __init__(self, use_real_hdrvdp=True, peak_luminance=1000.0):
+        self._pair_cache = None
+        self._pair_cache_key = None
+        self._official = None
+        self.hdrvdp_available = False
+
         if use_real_hdrvdp:
             try:
-                import pyfvvdp
+                from ..metrics.hdrvdp_official import OfficialHDRVDPBackend
 
-                self.pyfvvdp = pyfvvdp
-                self.fvvdp2 = pyfvvdp.fvvdp(display_name="standard_fhd", heatmap=None)
-                self.fvvdp3 = pyfvvdp.fvvdp(display_name="standard_4k", heatmap=None)
-                self.hdrvdp_available = True
-                print("FovVideoVDP loaded successfully")
+                self._official = OfficialHDRVDPBackend(peak_luminance=peak_luminance)
+                self.hdrvdp_available = self._official.available
+                if self.hdrvdp_available:
+                    print(
+                        f"Official HDR-VDP loaded (Octave: {self._official.octave_executable})"
+                    )
+                else:
+                    print(
+                        "WARNING: Official HDR-VDP not available (Octave or third_party missing). "
+                        "Metrics will be NaN. Use conda env 'trigate-hdrvdp' or set HDRVDP_OCTAVE_BIN."
+                    )
             except Exception as e:
-                print(f"WARNING: HDRVDP initialization failed ({e}), using PU21 fallback")
-                self.hdrvdp_available = False
-        else:
-            self.hdrvdp_available = False
+                print(f"WARNING: Official HDR-VDP init failed ({e})")
 
     def compute_hdrvdp2(self, hdr_pred, hdr_gt):
-        if self.hdrvdp_available:
-            return self._compute_real_fovvdp2(hdr_pred, hdr_gt)
-        return self._compute_pu21_metric(hdr_pred, hdr_gt, mu=5000.0)
+        q2, q3 = self._compute_official_pair(hdr_pred, hdr_gt)
+        return q2
 
     def compute_hdrvdp3(self, hdr_pred, hdr_gt):
-        if self.hdrvdp_available:
-            return self._compute_real_fovvdp3(hdr_pred, hdr_gt)
-        return self._compute_pu21_metric(hdr_pred, hdr_gt, mu=8000.0, use_spatial=True)
+        q2, q3 = self._compute_official_pair(hdr_pred, hdr_gt)
+        return q3
 
-    def _compute_real_fovvdp2(self, hdr_pred, hdr_gt):
-        try:
-            pred_np = hdr_pred.detach().cpu().numpy()
-            gt_np = hdr_gt.detach().cpu().numpy()
-            pred_np = np.clip((pred_np + 1.0) * 50.0, 0.01, 100.0)
-            gt_np = np.clip((gt_np + 1.0) * 50.0, 0.01, 100.0)
-            pred_np = np.transpose(pred_np, (1, 2, 0))
-            gt_np = np.transpose(gt_np, (1, 2, 0))
-            q_jod, _ = self.fvvdp2.predict(pred_np, gt_np, dim_order="HWC")
-            return float(np.clip(q_jod, 0.0, 10.0))
-        except Exception:
-            return self._compute_pu21_metric(hdr_pred, hdr_gt, mu=5000.0)
-
-    def _compute_real_fovvdp3(self, hdr_pred, hdr_gt):
-        try:
-            pred_np = hdr_pred.detach().cpu().numpy()
-            gt_np = hdr_gt.detach().cpu().numpy()
-            pred_np = np.clip((pred_np + 1.0) * 50.0, 0.01, 100.0)
-            gt_np = np.clip((gt_np + 1.0) * 50.0, 0.01, 100.0)
-            pred_np = np.transpose(pred_np, (1, 2, 0))
-            gt_np = np.transpose(gt_np, (1, 2, 0))
-            q_jod, _ = self.fvvdp3.predict(pred_np, gt_np, dim_order="HWC")
-            return float(np.clip(q_jod, 0.0, 10.0))
-        except Exception:
-            return self._compute_pu21_metric(hdr_pred, hdr_gt, mu=8000.0, use_spatial=True)
-
-    def _compute_pu21_metric(self, hdr_pred, hdr_gt, mu=5000.0, use_spatial=False):
-        pred_np = hdr_pred.detach().cpu().numpy()
-        gt_np = hdr_gt.detach().cpu().numpy()
-        l_pred = np.clip((pred_np + 1.0) * 50.0, 0.01, 100.0)
-        l_gt = np.clip((gt_np + 1.0) * 50.0, 0.01, 100.0)
-        pu_pred = self._pu21_encode(l_pred)
-        pu_gt = self._pu21_encode(l_gt)
-        mse = np.mean((pu_pred - pu_gt) ** 2)
-        if use_spatial:
-            spatial_mse = self._compute_spatial_error(pu_pred, pu_gt)
-            mse = 0.6 * mse + 0.4 * spatial_mse
-        max_val = self._pu21_encode(np.array([100.0]))[0]
-        psnr = 10.0 * np.log10((max_val ** 2) / (mse + 1e-10))
-        return float(np.clip(psnr / 10.0, 0.0, 10.0))
-
-    def _pu21_encode(self, luminance):
-        return np.log((luminance + 1e-4) / (luminance + 0.01))
-
-    def _compute_spatial_error(self, pred, gt, scales=(1, 2, 4)):
-        errors = []
-        for scale in scales:
-            if scale == 1:
-                err = np.mean((pred - gt) ** 2)
-            else:
-                pred_down = pred[:, ::scale, ::scale]
-                gt_down = gt[:, ::scale, ::scale]
-                err = np.mean((pred_down - gt_down) ** 2)
-            errors.append(err)
-        weights = np.array([0.5, 0.3, 0.2])[: len(errors)]
-        weights = weights / weights.sum()
-        return np.sum([w * e for w, e in zip(weights, errors)])
+    def _compute_official_pair(self, hdr_pred, hdr_gt):
+        cache_key = (hdr_pred.data_ptr(), hdr_gt.data_ptr())
+        if self._pair_cache_key == cache_key and self._pair_cache is not None:
+            return self._pair_cache
+        if not self.hdrvdp_available or self._official is None:
+            result = (float("nan"), float("nan"))
+        else:
+            try:
+                q2, q3 = self._official.compute_pair(hdr_pred, hdr_gt)
+                result = (
+                    float(q2) if np.isfinite(q2) else float("nan"),
+                    float(q3) if np.isfinite(q3) else float("nan"),
+                )
+            except Exception as e:
+                print(f"WARNING: HDR-VDP computation failed ({e})")
+                result = (float("nan"), float("nan"))
+        self._pair_cache_key = cache_key
+        self._pair_cache = result
+        return result
 
 
 def save_metrics_to_csv(csv_path, epoch, train_loss, val_psnr, val_ssim, val_hdrvdp2=0.0, val_hdrvdp3=0.0):
