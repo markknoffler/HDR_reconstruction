@@ -1,31 +1,0 @@
-Loading SD image-prompt (IP-Adapter) from: /home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/model_weights/stable-diffusion-v1-5
-  UNet cross-attn: CLIP vision on LDR (IP-Adapter) + CLIP text on caption
-  ip_adapter_scale=0.85  strength=0.35  image_only=False
-WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
-I0000 00:00:1779552851.373104   30586 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
-I0000 00:00:1779552851.397095   30586 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
-To enable the following instructions: AVX2 AVX_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
-WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
-I0000 00:00:1779552852.042388   30586 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
-[SD image-prompt] base model: /home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/model_weights/stable-diffusion-v1-5  local_files_only=True
-Loading pipeline components...:   0%|          | 0/7 [00:00<?, ?it/s]`torch_dtype` is deprecated! Use `dtype` instead!
-Loading pipeline components...:  14%|█▍        | 1/7 [00:00<00:00,  6.98it/s]Loading pipeline components...:  57%|█████▋    | 4/7 [00:00<00:00, 11.49it/s]Loading pipeline components...:  86%|████████▌ | 6/7 [00:00<00:00, 11.29it/s]Loading pipeline components...: 100%|██████████| 7/7 [00:00<00:00, 12.81it/s]
-[SD image-prompt] IP-Adapter: /home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/model_weights/ip-adapter (local)
-Device: cuda  dtype: float16  (all weights frozen)
-  0%|          | 0/10 [00:00<?, ?it/s] 10%|█         | 1/10 [00:00<00:01,  8.62it/s] 40%|████      | 4/10 [00:00<00:00, 16.26it/s] 70%|███████   | 7/10 [00:00<00:00, 18.24it/s]100%|██████████| 10/10 [00:00<00:00, 19.13it/s]100%|██████████| 10/10 [00:00<00:00, 17.97it/s]
-/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/model/training_scripts/common_training.py:89: RuntimeWarning: invalid value encountered in divide
-  scaled_mantissa = mantissa * 255.0 / brightest
-/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/model/training_scripts/common_training.py:91: RuntimeWarning: invalid value encountered in cast
-  rgbe[..., 0:3] = np.around(norm_image[..., 0:3] * scaled_mantissa[..., None])
-  saved: 01824
-  0%|          | 0/10 [00:00<?, ?it/s] 10%|█         | 1/10 [00:00<00:01,  7.33it/s] 40%|████      | 4/10 [00:00<00:00, 15.25it/s] 70%|███████   | 7/10 [00:00<00:00, 17.66it/s]100%|██████████| 10/10 [00:00<00:00, 18.75it/s]100%|██████████| 10/10 [00:00<00:00, 17.31it/s]
-  saved: 00409
-  0%|          | 0/10 [00:00<?, ?it/s] 10%|█         | 1/10 [00:00<00:01,  7.25it/s] 40%|████      | 4/10 [00:00<00:00, 15.22it/s] 70%|███████   | 7/10 [00:00<00:00, 17.64it/s]100%|██████████| 10/10 [00:00<00:00, 18.76it/s]100%|██████████| 10/10 [00:00<00:00, 17.30it/s]
-  saved: 04506
-  0%|          | 0/10 [00:00<?, ?it/s] 10%|█         | 1/10 [00:00<00:01,  7.42it/s] 40%|████      | 4/10 [00:00<00:00, 15.31it/s] 70%|███████   | 7/10 [00:00<00:00, 17.65it/s]100%|██████████| 10/10 [00:00<00:00, 18.76it/s]100%|██████████| 10/10 [00:00<00:00, 17.34it/s]
-  saved: 04012
-  0%|          | 0/10 [00:00<?, ?it/s] 10%|█         | 1/10 [00:00<00:01,  7.24it/s] 40%|████      | 4/10 [00:00<00:00, 15.17it/s] 70%|███████   | 7/10 [00:00<00:00, 17.58it/s]100%|██████████| 10/10 [00:00<00:00, 18.70it/s]100%|██████████| 10/10 [00:00<00:00, 17.25it/s]
-  saved: 03657
-
-Outputs: /home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/experiments/diffusion_sd_model_test
-Note: SD baseline outputs sRGB-like img2img results, not fine-tuned linear HDR. Use for plumbing/qualitative comparison only.
