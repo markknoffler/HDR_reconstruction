@@ -63,7 +63,13 @@ def main():
     parser.add_argument("--cache_dir", type=str, default="")
     parser.add_argument("--local_files_only", action="store_true")
     parser.add_argument("--device", type=str, default="")
-    parser.add_argument("--dtype", type=str, default="float16", choices=["float16", "float32", "bfloat16"])
+    parser.add_argument(
+        "--dtype",
+        type=str,
+        default="float32",
+        choices=["float16", "float32", "bfloat16"],
+        help="Use float32 if outputs are white/NaN (fp16 VAE decode issue).",
+    )
     parser.add_argument("--steps", type=int, default=30)
     parser.add_argument("--guidance_scale", type=float, default=7.5, help="Text instruction scale")
     parser.add_argument(
@@ -165,10 +171,13 @@ def main():
                 max_side=args.max_side,
                 output_range="trigate",
             )
-        pred = sanitize_hdr_tensor(pred)
-
+        # Save raw [0,1] RGB before TriGate [-1,1] mapping (debug white/NaN issues).
+        pred_01 = ((pred.float().clamp(-1, 1) + 1.0) * 0.5).cpu()
         out_stem = os.path.join(args.output_dir, stem)
         save_ldr_image_01(ldr.cpu(), 0, f"{out_stem}_input_ldr.png")
+        save_ldr_image_01(pred_01, 0, f"{out_stem}_pred_rgb_01.png")
+
+        pred = sanitize_hdr_tensor(pred)
         save_hdr_image(pred, 0, f"{out_stem}_pred_sd_proxy.hdr")
         save_hdr_image(hdr_gt, 0, f"{out_stem}_gt_hdr.hdr")
         _save_tonemapped_preview(pred, f"{out_stem}_pred_tonemap.png")

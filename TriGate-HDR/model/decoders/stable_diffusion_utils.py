@@ -69,3 +69,31 @@ def resize_ldr_for_sd(ldr_bchw: torch.Tensor, max_side: int = 768) -> torch.Tens
 def sd_output_to_trigate_hdr_range(pred_01: torch.Tensor) -> torch.Tensor:
     """Map SD RGB [0,1] to TriGate HDR tensor convention [-1, 1] for saving/metrics."""
     return (2.0 * pred_01.clamp(0.0, 1.0) - 1.0).clamp(-1.0, 1.0)
+
+
+def prepare_diffusion_pipeline_for_inference(pipeline, force_vae_fp32: bool = True) -> None:
+    """
+    FP16 UNet + FP16 VAE decode often yields NaNs / flat white images on InstructPix2Pix.
+    Keep UNet in loaded dtype but run VAE encode/decode in float32 when requested.
+    """
+    if force_vae_fp32 and hasattr(pipeline, "vae") and pipeline.vae is not None:
+        pipeline.vae.to(dtype=torch.float32)
+    if hasattr(pipeline, "upcast_vae"):
+        try:
+            pipeline.upcast_vae()
+        except Exception:
+            pass
+
+
+def check_sd_output_stats(pred_01: torch.Tensor, tag: str = "sd_out") -> None:
+    """Log tensor stats; warn on NaN or constant outputs (common fp16 VAE failure)."""
+    x = pred_01.detach().float().cpu()
+    finite = torch.isfinite(x)
+    if not finite.all():
+        print(f"[WARN] {tag}: non-finite pixels={int((~finite).sum())}")
+    xmin = float(x[finite].min()) if finite.any() else float("nan")
+    xmax = float(x[finite].max()) if finite.any() else float("nan")
+    xmean = float(x[finite].mean()) if finite.any() else float("nan")
+    print(f"[{tag}] min={xmin:.4f} max={xmax:.4f} mean={xmean:.4f}")
+    if finite.any() and (xmax - xmin) < 1e-4:
+        print(f"[WARN] {tag}: nearly constant output (often broken VAE / dtype). Use --dtype float32.")

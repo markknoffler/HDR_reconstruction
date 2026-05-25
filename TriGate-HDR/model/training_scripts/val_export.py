@@ -6,14 +6,18 @@ import os
 import random
 from typing import Callable, List, Optional, Tuple
 
+import cv2
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.amp import autocast
+from torch.utils.data import Subset
 from tqdm import tqdm
 
 from .common_training import (
     _finite_metric,
     compute_psnr_ssim,
+    mu_tonemap,
     sanitize_hdr_tensor,
     save_hdr_image,
     save_ldr_image_01,
@@ -121,6 +125,81 @@ def make_stage1_predictor(model):
         t = torch.zeros((input_ldr.shape[0],), device=device, dtype=torch.long)
         pred, _, _, _ = model(input_ldr, t, segmap=segmap)
         return pred
+
+    return predict
+
+
+def _save_tonemapped_preview(hdr_tensor: torch.Tensor, path: str, batch_idx: int = 0) -> None:
+    img = hdr_tensor.detach().float().cpu()
+    if img.dim() == 4:
+        img = img[batch_idx]
+    rgb = (img + 1.0) * 0.5
+    rgb = rgb.permute(1, 2, 0).numpy()
+    rgb = np.clip(rgb, 0.0, 1.0)
+    tm = mu_tonemap(torch.from_numpy(rgb).permute(2, 0, 1).unsqueeze(0)).squeeze(0)
+    tm = tm.permute(1, 2, 0).numpy()
+    tm = np.clip(tm, 0.0, 1.0)
+    bgr = cv2.cvtColor((tm * 255).astype(np.uint8), cv2.COLOR_RGB2BGR)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    cv2.imwrite(path, bgr)
+
+
+@torch.no_grad()
+def export_final_test_samples(
+    full_dataset,
+    val_indices: List[int],
+    device,
+    predict_hdr: Callable,
+    output_dir: str,
+    count: int = 5,
+    seed: int = 123,
+    amp: bool = False,
+) -> None:
+    """
+    After training completes: pick random validation indices, run LDR->HDR, save previews.
+    """
+    picks = pick_val_export_indices(val_indices, count, seed)
+    if not picks:
+        print("[WARN] No validation indices for final test export.")
+        return
+
+    os.makedirs(output_dir, exist_ok=True)
+    val_subset = Subset(full_dataset, picks)
+    print(f"Final test export: {len(picks)} images -> {output_dir}")
+
+    for i, idx in enumerate(picks):
+        batch = full_dataset[idx]
+        ldr = batch["ldr_image"].unsqueeze(0).to(device)
+        hdr_gt = batch["hdr_image"].unsqueeze(0).to(device)
+        stem = f"test_{i:02d}_idx{idx}"
+
+        with autocast("cuda", enabled=amp and device.type == "cuda"):
+            pred = predict_hdr(batch, ldr, hdr_gt, device)
+        pred = sanitize_hdr_tensor(pred)
+        hdr_gt = sanitize_hdr_tensor(hdr_gt)
+
+        save_ldr_image_01(ldr, 0, os.path.join(output_dir, f"{stem}_input_ldr.png"))
+        save_hdr_image(pred, 0, os.path.join(output_dir, f"{stem}_pred_hdr.hdr"))
+        save_hdr_image(hdr_gt, 0, os.path.join(output_dir, f"{stem}_gt_hdr.hdr"))
+        _save_tonemapped_preview(pred, os.path.join(output_dir, f"{stem}_pred_tonemap.png"))
+        _save_tonemapped_preview(hdr_gt, os.path.join(output_dir, f"{stem}_gt_tonemap.png"))
+        print(f"  saved {stem}")
+
+
+def make_stage1_instruct_predictor(model, num_inference_steps: int = 25):
+    """Validation predictor for TrainableTriGateInstructPix2PixStage1."""
+
+    def predict(batch, input_ldr, ground_truth, device):
+        segmap = batch.get("segmap", input_ldr)
+        if not torch.is_tensor(segmap):
+            segmap = input_ldr
+        else:
+            segmap = segmap.to(device)
+        return model.restore_hdr(
+            input_ldr,
+            segmap=segmap,
+            num_inference_steps=num_inference_steps,
+        )
 
     return predict
 

@@ -39,6 +39,13 @@ python -m model.training_scripts.infer_stable_diffusion_baseline \
   --steps 30
 ```
 
+### White or blank outputs?
+
+- Default dtype is now **`float32`** (fp16 VAE decode often → NaN → white after clamping).
+- Console prints `[instruct_pix2pix] min=... max=...` — if min≈max or many NaNs, dtype/model failed.
+- Check saved **`*_pred_rgb_01.png`** (direct model RGB before HDR export).
+- Weights: pretrained **`timmbrooks/instruct-pix2pix`** from Hugging Face (not random).
+
 **Tuning (frozen):**
 
 - `--image_guidance_scale` **↑** (e.g. 1.8–2.0): stick closer to LDR layout/appearance  

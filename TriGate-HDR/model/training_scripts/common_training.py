@@ -79,7 +79,12 @@ def write_hdr(hdr_image, path):
     """Writing HDR image in radiance (.hdr) format (ARThdrNet/utils.py)."""
     norm_image = cv2.cvtColor(hdr_image, cv2.COLOR_BGR2RGB)
     with open(path, "wb") as f:
-        norm_image = (norm_image - norm_image.min()) / (norm_image.max() - norm_image.min())
+        vmin, vmax = float(norm_image.min()), float(norm_image.max())
+        denom = vmax - vmin
+        if denom > 1e-8:
+            norm_image = (norm_image - vmin) / denom
+        else:
+            norm_image = np.clip(norm_image, 0.0, 1.0)
         f.write(b"#?RADIANCE\n# Made with Python & Numpy\nFORMAT=32-bit_rle_rgbe\n\n")
         f.write(b"-Y %d +X %d\n" % (norm_image.shape[0], norm_image.shape[1]))
         brightest = np.maximum(np.maximum(norm_image[..., 0], norm_image[..., 1]), norm_image[..., 2])
@@ -234,6 +239,12 @@ def save_checkpoint(checkpoint_dir, tag, payload):
     torch.save(payload, os.path.join(checkpoint_dir, "latest.pt"))
 
 
+def save_latest_checkpoint(checkpoint_dir, payload):
+    """Resume checkpoint only (written every epoch; does not create epoch_N.pt)."""
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    torch.save(payload, os.path.join(checkpoint_dir, "latest.pt"))
+
+
 def save_best_checkpoint(checkpoint_dir, payload):
     os.makedirs(checkpoint_dir, exist_ok=True)
     torch.save(payload, os.path.join(checkpoint_dir, "best.pt"))
@@ -275,8 +286,19 @@ def add_subset_args(parser):
     parser.add_argument(
         "--save_ckpt_after",
         type=int,
-        default=1,
-        help="Save epoch checkpoint every N epochs (validation still runs every epoch).",
+        default=5,
+        help="Save tagged epoch_N.pt every N epochs (metrics/validation run every epoch).",
+    )
+    parser.add_argument(
+        "--final_test_count",
+        type=int,
+        default=5,
+        help="After training finishes, export this many random val LDR->HDR test images.",
+    )
+    parser.add_argument(
+        "--skip_final_test_export",
+        action="store_true",
+        help="Do not run the post-training random val export.",
     )
     parser.add_argument(
         "--save_val_samples_each_epoch",

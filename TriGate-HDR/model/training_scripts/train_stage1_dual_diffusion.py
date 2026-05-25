@@ -18,10 +18,11 @@ from .common_training import (
     print_epoch_summary,
     save_best_checkpoint,
     save_checkpoint,
+    save_latest_checkpoint,
     save_metrics_to_csv,
 )
 from .dataset_splits import build_dataloaders
-from .val_export import make_stage1_predictor, validate_model_mtraining
+from .val_export import export_final_test_samples, make_stage1_predictor, validate_model_mtraining
 
 
 def main():
@@ -59,9 +60,9 @@ def main():
             args.checkpoint_dir, model, optimizer
         )
 
-    train_loader, val_loader = None, None
+    train_loader, val_loader, full_dataset, val_indices = None, None, None, []
     if args.ldr_dir and args.hdr_dir:
-        train_loader, val_loader, _, _ = build_dataloaders(
+        train_loader, val_loader, full_dataset, val_indices = build_dataloaders(
             args.ldr_dir,
             args.hdr_dir,
             args.batch_size,
@@ -159,12 +160,32 @@ def main():
             save_checkpoint(args.checkpoint_dir, f"best_epoch_{epoch}", payload)
             print(f"  Saved best model with PSNR: {val_psnr:.4f}")
 
-        if epoch % args.save_ckpt_after == 0:
+        save_latest_checkpoint(args.checkpoint_dir, payload)
+
+        if epoch % args.save_ckpt_after == 0 or epoch == args.epochs:
             save_checkpoint(args.checkpoint_dir, f"epoch_{epoch}", payload)
             print(f"  Saved checkpoint at epoch {epoch}")
 
         if args.save_val_samples_each_epoch:
             print(f"  Validation samples: {os.path.join(validation_root, f'epoch_{epoch}')}")
+
+    if not args.skip_final_test_export and val_indices and full_dataset is not None:
+        final_test_dir = os.path.join(
+            args.val_export_dir or os.path.join(args.checkpoint_dir, "val_exports"),
+            "final_test_exports",
+        )
+        print("\nRunning final test export...")
+        model.eval()
+        export_final_test_samples(
+            full_dataset,
+            val_indices,
+            device,
+            predict_fn,
+            final_test_dir,
+            count=args.final_test_count,
+            seed=args.val_export_seed,
+            amp=args.amp,
+        )
 
 
 if __name__ == "__main__":

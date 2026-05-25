@@ -18,8 +18,10 @@ import torch.nn as nn
 
 from .stable_diffusion_components import StableDiffusionComponentConfig, StableDiffusionLatentStack
 from .stable_diffusion_utils import (
+    check_sd_output_stats,
     freeze_module,
     pil_list_to_tensor_bchw,
+    prepare_diffusion_pipeline_for_inference,
     require_diffusers,
     resize_ldr_for_sd,
     sd_output_to_trigate_hdr_range,
@@ -113,6 +115,7 @@ class FrozenStableDiffusionStage1(nn.Module):
 
         if enable_attention_slicing:
             pipe.enable_attention_slicing()
+        prepare_diffusion_pipeline_for_inference(pipe, force_vae_fp32=True)
         if enable_cpu_offload and hasattr(pipe, "enable_model_cpu_offload"):
             pipe.enable_model_cpu_offload()
 
@@ -190,6 +193,7 @@ class FrozenStableDiffusionStage1(nn.Module):
             out_pils.append(result.images[0])
 
         pred = pil_list_to_tensor_bchw(out_pils, device=ldr.device, dtype=torch.float32)
+        check_sd_output_stats(pred, tag="sd_img2img")
 
         if pred.shape[2] != orig_h or pred.shape[3] != orig_w:
             import torch.nn.functional as F
