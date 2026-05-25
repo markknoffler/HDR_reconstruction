@@ -85,6 +85,7 @@ def main():
         torch_dtype=args.torch_dtype,
         lora_rank=args.lora_rank,
     )
+    model = model.to(device)
 
     lora_params = [p for n, p in model.unet.named_parameters() if p.requires_grad]
     enc_params = [p for p in model.cond_injector.parameters() if p.requires_grad]
@@ -105,6 +106,7 @@ def main():
         start_epoch, best_psnr, best_ssim, best_hdrvdp2, best_hdrvdp3 = maybe_resume(
             args.checkpoint_dir, model, optimizer
         )
+        model = model.to(device)
         print(
             f"Resuming from epoch {start_epoch} "
             f"(best PSNR={best_psnr:.4f}, SSIM={best_ssim:.4f})"

@@ -82,10 +82,8 @@ class TrainableTriGateInstructPix2PixStage1(nn.Module):
         from diffusers import DDPMScheduler, StableDiffusionInstructPix2PixPipeline
 
         dtype = _resolve_dtype(torch_dtype)
-        pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(
-            model_id,
+        load_kw = dict(
             revision=revision,
-            torch_dtype=dtype,
             variant=variant,
             use_safetensors=use_safetensors,
             local_files_only=local_files_only,
@@ -93,15 +91,23 @@ class TrainableTriGateInstructPix2PixStage1(nn.Module):
             safety_checker=None,
             requires_safety_checker=False,
         )
+        try:
+            pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(
+                model_id, dtype=dtype, **load_kw
+            )
+        except TypeError:
+            pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(
+                model_id, torch_dtype=dtype, **load_kw
+            )
         prepare_diffusion_pipeline_for_inference(pipe, force_vae_fp32=True)
 
         if device is not None:
             dev = torch.device(device)
-            pipe = pipe.to(dev)
         elif torch.cuda.is_available():
-            pipe = pipe.to("cuda")
+            dev = torch.device("cuda")
         else:
-            pipe = pipe.to("cpu")
+            dev = torch.device("cpu")
+        pipe = pipe.to(dev)
 
         scheduler = DDPMScheduler.from_config(pipe.scheduler.config)
         model = cls(
@@ -114,6 +120,8 @@ class TrainableTriGateInstructPix2PixStage1(nn.Module):
             train_lora=train_lora,
             train_cond_injector=train_cond_injector,
         )
+        # TriGate cond_injector is created after pipe.to(); move entire module tree to dev.
+        model = model.to(dev)
         model._inference_pipeline = pipe
         return model
 
