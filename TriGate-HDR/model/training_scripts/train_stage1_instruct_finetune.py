@@ -52,6 +52,7 @@ def main():
     parser.add_argument("--sam_mask_dir", type=str, default="")
     parser.add_argument("--max_sam_classes", type=int, default=64)
     parser.add_argument("--max_dim", type=int, default=0)
+    parser.add_argument("--num_workers", type=int, default=4)
     parser.add_argument("--amp", action="store_true")
     parser.add_argument(
         "--continue_train",
@@ -127,6 +128,7 @@ def main():
         subset_fraction=args.subset_fraction,
         subset_packet=args.subset_packet,
         checkpoint_dir=args.checkpoint_dir,
+        num_workers=args.num_workers,
         max_train_samples=args.max_train_samples,
         max_val_samples=args.max_val_samples,
     )
