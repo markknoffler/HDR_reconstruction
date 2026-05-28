@@ -11,12 +11,14 @@ Training loop aligned with ARThdrNet/m_training.py and train_stage1_dual_diffusi
 """
 
 import argparse
+import csv
 import os
 import time
 
 import torch
 import torch.optim as optim
 from torch.amp import autocast, GradScaler
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
 from ..instructpix2pix_pretrained_finetuned_stage1 import TrainableTriGateInstructPix2PixStage1
@@ -29,7 +31,6 @@ from .common_training import (
     save_best_checkpoint,
     save_checkpoint,
     save_latest_checkpoint,
-    save_metrics_to_csv,
 )
 from .dataset_splits import build_dataloaders
 from .val_export import (
@@ -37,6 +38,77 @@ from .val_export import (
     make_stage1_instruct_predictor,
     validate_model_mtraining,
 )
+
+
+def _append_extended_metrics_csv(
+    csv_path: str,
+    epoch: int,
+    train_loss: float,
+    tr_psnr: float,
+    tr_ssim: float,
+    tr_hdrvdp2: float,
+    tr_hdrvdp3: float,
+    val_psnr,
+    val_ssim,
+    val_hdrvdp2,
+    val_hdrvdp3,
+    val_ran: bool,
+):
+    file_exists = os.path.isfile(csv_path)
+    with open(csv_path, "a", newline="") as csvfile:
+        fieldnames = [
+            "epoch",
+            "train_loss",
+            "train_subset_psnr",
+            "train_subset_ssim",
+            "train_subset_hdrvdp2",
+            "train_subset_hdrvdp3",
+            "val_psnr",
+            "val_ssim",
+            "val_hdrvdp2",
+            "val_hdrvdp3",
+            "val_ran",
+        ]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(
+            {
+                "epoch": epoch,
+                "train_loss": f"{float(train_loss):.6f}",
+                "train_subset_psnr": f"{float(tr_psnr):.4f}",
+                "train_subset_ssim": f"{float(tr_ssim):.4f}",
+                "train_subset_hdrvdp2": f"{float(tr_hdrvdp2):.4f}",
+                "train_subset_hdrvdp3": f"{float(tr_hdrvdp3):.4f}",
+                "val_psnr": f"{float(val_psnr):.4f}" if val_ran else "",
+                "val_ssim": f"{float(val_ssim):.4f}" if val_ran else "",
+                "val_hdrvdp2": f"{float(val_hdrvdp2):.4f}" if val_ran else "",
+                "val_hdrvdp3": f"{float(val_hdrvdp3):.4f}" if val_ran else "",
+                "val_ran": int(val_ran),
+            }
+        )
+
+
+def _make_train_subset_loader(train_loader, sample_count: int, num_workers: int, seed: int):
+    ds = train_loader.dataset
+    indices = list(getattr(ds, "indices", []))
+    if not indices:
+        return None
+    if len(indices) <= sample_count:
+        picked = indices
+    else:
+        g = torch.Generator()
+        g.manual_seed(int(seed))
+        order = torch.randperm(len(indices), generator=g).tolist()
+        picked = [indices[i] for i in order[:sample_count]]
+    subset = Subset(ds.dataset, picked)
+    return DataLoader(
+        subset,
+        batch_size=1,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True,
+    )
 
 
 def main():
@@ -66,6 +138,18 @@ def main():
     parser.add_argument("--novelty_ramp_epochs", type=int, default=10)
     parser.add_argument("--max_novelty_weight", type=float, default=0.25)
     parser.add_argument("--val_inference_steps", type=int, default=20)
+    parser.add_argument(
+        "--full_val_every",
+        type=int,
+        default=10,
+        help="Run full validation split every N epochs (and at last epoch).",
+    )
+    parser.add_argument(
+        "--train_eval_samples",
+        type=int,
+        default=100,
+        help="Number of train images used each epoch for train-set metric probe.",
+    )
     parser.add_argument("--use_real_hdrvdp", action="store_true")
     add_subset_args(parser)
     args = parser.parse_args()
@@ -140,6 +224,8 @@ def main():
     print(f"  Metrics CSV     : {csv_path}")
     print(f"  Validation dumps: {validation_root}/epoch_<N>/")
     print(f"  Checkpoints     : latest.pt every epoch; epoch_<N>.pt every {args.save_ckpt_after} epochs")
+    print(f"  Full validation : every {args.full_val_every} epochs (+ final epoch)")
+    print(f"  Train probe     : {args.train_eval_samples} train images per epoch")
 
     predict_fn = make_stage1_instruct_predictor(model, num_inference_steps=args.val_inference_steps)
 
@@ -190,15 +276,44 @@ def main():
         train_loss = running / max(1, len(train_loader))
         epoch_time = time.time() - epoch_start
 
-        val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3 = 0.0, 0.0, 0.0, 0.0
-        if val_loader is not None:
-            print("Validating...")
-            model.eval()
-            # ARThdrNet: dump val images when epoch % save_ckpt_after == 0 or epoch == 1;
-            # TriGate default: every epoch (user request). Cap count with val_export_count.
-            save_val_images = args.save_val_samples_each_epoch or (
-                epoch == 1 or epoch % args.save_ckpt_after == 0
+        model.eval()
+        train_probe_loader = _make_train_subset_loader(
+            train_loader,
+            sample_count=max(1, int(args.train_eval_samples)),
+            num_workers=args.num_workers,
+            seed=args.val_export_seed + epoch,
+        )
+        tr_psnr, tr_ssim, tr_hdrvdp2, tr_hdrvdp3 = 0.0, 0.0, 0.0, 0.0
+        if train_probe_loader is not None:
+            print(f"Train-probe metrics on {len(train_probe_loader.dataset)} samples...")
+            tr_psnr, tr_ssim, tr_hdrvdp2, tr_hdrvdp3 = validate_model_mtraining(
+                train_probe_loader,
+                device,
+                epoch,
+                hdrvdp_calculator,
+                predict_fn,
+                validation_root,
+                save_samples=False,
+                max_samples=0,
+                amp=args.amp,
             )
+            print(
+                f"  Train-probe PSNR/SSIM/HDRVDP2/HDRVDP3: "
+                f"{tr_psnr:.4f} / {tr_ssim:.4f} / {tr_hdrvdp2:.4f} / {tr_hdrvdp3:.4f}"
+            )
+
+        val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3 = 0.0, 0.0, 0.0, 0.0
+        val_ran = False
+        do_full_val = (
+            val_loader is not None
+            and (
+                epoch % max(1, int(args.full_val_every)) == 0
+                or epoch == args.epochs
+            )
+        )
+        if do_full_val:
+            print("Running full validation split...")
+            save_val_images = args.save_val_samples_each_epoch
             val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3 = validate_model_mtraining(
                 val_loader,
                 device,
@@ -210,11 +325,26 @@ def main():
                 max_samples=args.val_export_count,
                 amp=args.amp,
             )
-            model.train()
+            val_ran = True
+            print(
+                f"  Full-val PSNR/SSIM/HDRVDP2/HDRVDP3: "
+                f"{val_psnr:.4f} / {val_ssim:.4f} / {val_hdrvdp2:.4f} / {val_hdrvdp3:.4f}"
+            )
+        model.train()
 
-        save_metrics_to_csv(csv_path, epoch, train_loss, val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3)
-        print_epoch_summary(
-            epoch, args.epochs, train_loss, val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3, epoch_time
+        _append_extended_metrics_csv(
+            csv_path,
+            epoch,
+            train_loss,
+            tr_psnr,
+            tr_ssim,
+            tr_hdrvdp2,
+            tr_hdrvdp3,
+            val_psnr,
+            val_ssim,
+            val_hdrvdp2,
+            val_hdrvdp3,
+            val_ran=val_ran,
         )
         print(f"  Metrics appended to: {csv_path}")
 
@@ -223,10 +353,15 @@ def main():
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
             "train_loss": train_loss,
-            "val_psnr": val_psnr,
-            "val_ssim": val_ssim,
-            "val_hdrvdp2": val_hdrvdp2,
-            "val_hdrvdp3": val_hdrvdp3,
+            "train_subset_psnr": tr_psnr,
+            "train_subset_ssim": tr_ssim,
+            "train_subset_hdrvdp2": tr_hdrvdp2,
+            "train_subset_hdrvdp3": tr_hdrvdp3,
+            "val_psnr": val_psnr if val_ran else None,
+            "val_ssim": val_ssim if val_ran else None,
+            "val_hdrvdp2": val_hdrvdp2 if val_ran else None,
+            "val_hdrvdp3": val_hdrvdp3 if val_ran else None,
+            "val_ran": val_ran,
             "best_val_psnr": best_psnr,
             "best_val_ssim": best_ssim,
             "best_val_hdrvdp2": best_hdrvdp2,
@@ -238,7 +373,7 @@ def main():
         save_latest_checkpoint(args.checkpoint_dir, payload)
         print(f"  Saved latest.pt (resume with --continue_train)")
 
-        if val_psnr > best_psnr:
+        if val_ran and val_psnr > best_psnr:
             best_psnr, best_ssim = val_psnr, val_ssim
             best_hdrvdp2, best_hdrvdp3 = val_hdrvdp2, val_hdrvdp3
             payload["best_val_psnr"] = best_psnr
@@ -253,8 +388,26 @@ def main():
             save_checkpoint(args.checkpoint_dir, f"epoch_{epoch}", payload)
             print(f"  Saved checkpoint: epoch_{epoch}.pt")
 
-        if save_val_images:
+        if val_ran and args.save_val_samples_each_epoch:
             print(f"  Validation samples: {os.path.join(validation_root, f'epoch_{epoch}')}")
+
+        print(f"\n{'=' * 60}")
+        print(f"Epoch {epoch}/{args.epochs} Summary")
+        print(f"{'=' * 60}")
+        print(f"  Training Loss                : {train_loss:.6f}")
+        print(
+            f"  Train Probe [PSNR/SSIM/H2/H3]: "
+            f"{tr_psnr:.4f} / {tr_ssim:.4f} / {tr_hdrvdp2:.4f} / {tr_hdrvdp3:.4f}"
+        )
+        if val_ran:
+            print(
+                f"  Full Val   [PSNR/SSIM/H2/H3]: "
+                f"{val_psnr:.4f} / {val_ssim:.4f} / {val_hdrvdp2:.4f} / {val_hdrvdp3:.4f}"
+            )
+        else:
+            print(f"  Full Val                    : skipped (every {args.full_val_every} epochs)")
+        print(f"  Epoch Time                  : {epoch_time:.2f} seconds")
+        print(f"{'=' * 60}")
 
     print("\n" + "=" * 60)
     print("TRAINING COMPLETED")
