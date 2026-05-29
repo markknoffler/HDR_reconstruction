@@ -1,0 +1,30 @@
+{
+  "file": "02981.jpg",
+  "num_classes": 2,
+  "segments": [
+    {
+      "class_id": 1,
+      "area": 260208,
+      "pred_iou": 1.0300482511520386,
+      "stability_score": 0.994286298751831,
+      "bbox_xywh": [
+        0,
+        1,
+        511,
+        508
+      ]
+    },
+    {
+      "class_id": 2,
+      "area": 28,
+      "pred_iou": 0.9021733403205872,
+      "stability_score": 1.0,
+      "bbox_xywh": [
+        421,
+        393,
+        5,
+        5
+      ]
+    }
+  ]
+}

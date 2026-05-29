@@ -1,0 +1,654 @@
+{
+  "file": "08051.jpg",
+  "num_classes": 54,
+  "segments": [
+    {
+      "class_id": 1,
+      "area": 92754,
+      "pred_iou": 0.9718214273452759,
+      "stability_score": 0.9570157527923584,
+      "bbox_xywh": [
+        221,
+        0,
+        290,
+        491
+      ]
+    },
+    {
+      "class_id": 2,
+      "area": 74030,
+      "pred_iou": 1.0176506042480469,
+      "stability_score": 0.9897686243057251,
+      "bbox_xywh": [
+        0,
+        174,
+        511,
+        337
+      ]
+    },
+    {
+      "class_id": 3,
+      "area": 73786,
+      "pred_iou": 1.035296082496643,
+      "stability_score": 0.992034375667572,
+      "bbox_xywh": [
+        0,
+        304,
+        511,
+        207
+      ]
+    },
+    {
+      "class_id": 4,
+      "area": 65057,
+      "pred_iou": 1.0035878419876099,
+      "stability_score": 0.9703534245491028,
+      "bbox_xywh": [
+        366,
+        0,
+        145,
+        478
+      ]
+    },
+    {
+      "class_id": 5,
+      "area": 56835,
+      "pred_iou": 1.0181598663330078,
+      "stability_score": 0.9829586148262024,
+      "bbox_xywh": [
+        0,
+        304,
+        300,
+        207
+      ]
+    },
+    {
+      "class_id": 6,
+      "area": 48125,
+      "pred_iou": 0.9312548637390137,
+      "stability_score": 0.9547731280326843,
+      "bbox_xywh": [
+        0,
+        0,
+        286,
+        332
+      ]
+    },
+    {
+      "class_id": 7,
+      "area": 37148,
+      "pred_iou": 1.0316861867904663,
+      "stability_score": 0.9791750311851501,
+      "bbox_xywh": [
+        0,
+        0,
+        287,
+        171
+      ]
+    },
+    {
+      "class_id": 8,
+      "area": 23513,
+      "pred_iou": 0.9889252781867981,
+      "stability_score": 0.9613723158836365,
+      "bbox_xywh": [
+        298,
+        0,
+        68,
+        374
+      ]
+    },
+    {
+      "class_id": 9,
+      "area": 23469,
+      "pred_iou": 0.9889551997184753,
+      "stability_score": 0.960708498954773,
+      "bbox_xywh": [
+        233,
+        0,
+        133,
+        374
+      ]
+    },
+    {
+      "class_id": 10,
+      "area": 17594,
+      "pred_iou": 1.0116807222366333,
+      "stability_score": 0.9753992557525635,
+      "bbox_xywh": [
+        236,
+        16,
+        61,
+        343
+      ]
+    },
+    {
+      "class_id": 11,
+      "area": 15969,
+      "pred_iou": 0.9901650547981262,
+      "stability_score": 0.9495384693145752,
+      "bbox_xywh": [
+        298,
+        376,
+        211,
+        135
+      ]
+    },
+    {
+      "class_id": 12,
+      "area": 14311,
+      "pred_iou": 0.9506243467330933,
+      "stability_score": 0.945525050163269,
+      "bbox_xywh": [
+        58,
+        149,
+        158,
+        157
+      ]
+    },
+    {
+      "class_id": 13,
+      "area": 10938,
+      "pred_iou": 0.9278748035430908,
+      "stability_score": 0.9279971122741699,
+      "bbox_xywh": [
+        0,
+        82,
+        56,
+        253
+      ]
+    },
+    {
+      "class_id": 14,
+      "area": 9341,
+      "pred_iou": 0.9392005205154419,
+      "stability_score": 0.9646251201629639,
+      "bbox_xywh": [
+        237,
+        342,
+        62,
+        169
+      ]
+    },
+    {
+      "class_id": 15,
+      "area": 8604,
+      "pred_iou": 0.9475804567337036,
+      "stability_score": 0.9523863792419434,
+      "bbox_xywh": [
+        59,
+        172,
+        118,
+        125
+      ]
+    },
+    {
+      "class_id": 16,
+      "area": 5795,
+      "pred_iou": 0.984473705291748,
+      "stability_score": 0.9672857522964478,
+      "bbox_xywh": [
+        178,
+        149,
+        39,
+        158
+      ]
+    },
+    {
+      "class_id": 17,
+      "area": 5077,
+      "pred_iou": 0.9130470156669617,
+      "stability_score": 0.9477826952934265,
+      "bbox_xywh": [
+        125,
+        172,
+        52,
+        125
+      ]
+    },
+    {
+      "class_id": 18,
+      "area": 3783,
+      "pred_iou": 0.9435845017433167,
+      "stability_score": 0.9202454090118408,
+      "bbox_xywh": [
+        218,
+        84,
+        18,
+        248
+      ]
+    },
+    {
+      "class_id": 19,
+      "area": 3721,
+      "pred_iou": 0.9842697381973267,
+      "stability_score": 0.9640876650810242,
+      "bbox_xywh": [
+        366,
+        393,
+        145,
+        100
+      ]
+    },
+    {
+      "class_id": 20,
+      "area": 2437,
+      "pred_iou": 0.9440192580223083,
+      "stability_score": 0.9709794521331787,
+      "bbox_xywh": [
+        88,
+        345,
+        37,
+        70
+      ]
+    },
+    {
+      "class_id": 21,
+      "area": 2211,
+      "pred_iou": 0.979856014251709,
+      "stability_score": 0.974530816078186,
+      "bbox_xywh": [
+        82,
+        238,
+        70,
+        64
+      ]
+    },
+    {
+      "class_id": 22,
+      "area": 1936,
+      "pred_iou": 0.9527065753936768,
+      "stability_score": 0.9462041258811951,
+      "bbox_xywh": [
+        83,
+        176,
+        49,
+        73
+      ]
+    },
+    {
+      "class_id": 23,
+      "area": 1300,
+      "pred_iou": 0.9255310297012329,
+      "stability_score": 0.9621498584747314,
+      "bbox_xywh": [
+        8,
+        123,
+        18,
+        208
+      ]
+    },
+    {
+      "class_id": 24,
+      "area": 1296,
+      "pred_iou": 0.9369252324104309,
+      "stability_score": 0.9839080572128296,
+      "bbox_xywh": [
+        8,
+        123,
+        7,
+        208
+      ]
+    },
+    {
+      "class_id": 25,
+      "area": 1107,
+      "pred_iou": 0.915953516960144,
+      "stability_score": 0.9723461270332336,
+      "bbox_xywh": [
+        90,
+        184,
+        34,
+        54
+      ]
+    },
+    {
+      "class_id": 26,
+      "area": 1029,
+      "pred_iou": 0.9550548791885376,
+      "stability_score": 0.9750240445137024,
+      "bbox_xywh": [
+        82,
+        176,
+        25,
+        74
+      ]
+    },
+    {
+      "class_id": 27,
+      "area": 1003,
+      "pred_iou": 0.9759286642074585,
+      "stability_score": 0.9763546586036682,
+      "bbox_xywh": [
+        314,
+        104,
+        52,
+        19
+      ]
+    },
+    {
+      "class_id": 28,
+      "area": 992,
+      "pred_iou": 0.9879016280174255,
+      "stability_score": 0.988988995552063,
+      "bbox_xywh": [
+        297,
+        358,
+        69,
+        21
+      ]
+    },
+    {
+      "class_id": 29,
+      "area": 960,
+      "pred_iou": 0.9459468722343445,
+      "stability_score": 0.9569672346115112,
+      "bbox_xywh": [
+        108,
+        176,
+        24,
+        70
+      ]
+    },
+    {
+      "class_id": 30,
+      "area": 902,
+      "pred_iou": 0.8970696330070496,
+      "stability_score": 0.9525862336158752,
+      "bbox_xywh": [
+        23,
+        123,
+        5,
+        199
+      ]
+    },
+    {
+      "class_id": 31,
+      "area": 899,
+      "pred_iou": 0.8942168951034546,
+      "stability_score": 0.9514563083648682,
+      "bbox_xywh": [
+        23,
+        123,
+        15,
+        199
+      ]
+    },
+    {
+      "class_id": 32,
+      "area": 874,
+      "pred_iou": 0.9271831512451172,
+      "stability_score": 0.9456160068511963,
+      "bbox_xywh": [
+        230,
+        0,
+        67,
+        91
+      ]
+    },
+    {
+      "class_id": 33,
+      "area": 792,
+      "pred_iou": 0.961765468120575,
+      "stability_score": 0.99370276927948,
+      "bbox_xywh": [
+        0,
+        0,
+        79,
+        9
+      ]
+    },
+    {
+      "class_id": 34,
+      "area": 691,
+      "pred_iou": 0.9135779738426208,
+      "stability_score": 0.9885386824607849,
+      "bbox_xywh": [
+        171,
+        0,
+        77,
+        8
+      ]
+    },
+    {
+      "class_id": 35,
+      "area": 680,
+      "pred_iou": 0.9640997648239136,
+      "stability_score": 0.9782293438911438,
+      "bbox_xywh": [
+        95,
+        0,
+        70,
+        9
+      ]
+    },
+    {
+      "class_id": 36,
+      "area": 609,
+      "pred_iou": 0.9187203645706177,
+      "stability_score": 0.9516128897666931,
+      "bbox_xywh": [
+        0,
+        10,
+        58,
+        132
+      ]
+    },
+    {
+      "class_id": 37,
+      "area": 552,
+      "pred_iou": 0.8654147386550903,
+      "stability_score": 0.9332161545753479,
+      "bbox_xywh": [
+        58,
+        297,
+        118,
+        5
+      ]
+    },
+    {
+      "class_id": 38,
+      "area": 536,
+      "pred_iou": 0.917282223701477,
+      "stability_score": 0.9407540559768677,
+      "bbox_xywh": [
+        335,
+        104,
+        31,
+        18
+      ]
+    },
+    {
+      "class_id": 39,
+      "area": 504,
+      "pred_iou": 0.9046375155448914,
+      "stability_score": 0.9388145208358765,
+      "bbox_xywh": [
+        285,
+        18,
+        11,
+        51
+      ]
+    },
+    {
+      "class_id": 40,
+      "area": 473,
+      "pred_iou": 0.9275296330451965,
+      "stability_score": 0.9402061700820923,
+      "bbox_xywh": [
+        259,
+        52,
+        10,
+        50
+      ]
+    },
+    {
+      "class_id": 41,
+      "area": 429,
+      "pred_iou": 0.9437055587768555,
+      "stability_score": 0.9837962985038757,
+      "bbox_xywh": [
+        345,
+        164,
+        18,
+        29
+      ]
+    },
+    {
+      "class_id": 42,
+      "area": 424,
+      "pred_iou": 0.8733441829681396,
+      "stability_score": 0.9389140009880066,
+      "bbox_xywh": [
+        55,
+        172,
+        4,
+        129
+      ]
+    },
+    {
+      "class_id": 43,
+      "area": 375,
+      "pred_iou": 0.969610869884491,
+      "stability_score": 0.9816272854804993,
+      "bbox_xywh": [
+        314,
+        105,
+        19,
+        18
+      ]
+    },
+    {
+      "class_id": 44,
+      "area": 345,
+      "pred_iou": 0.9571095705032349,
+      "stability_score": 0.9745042324066162,
+      "bbox_xywh": [
+        111,
+        272,
+        13,
+        30
+      ]
+    },
+    {
+      "class_id": 45,
+      "area": 310,
+      "pred_iou": 0.9883207082748413,
+      "stability_score": 0.9935483932495117,
+      "bbox_xywh": [
+        193,
+        194,
+        23,
+        12
+      ]
+    },
+    {
+      "class_id": 46,
+      "area": 304,
+      "pred_iou": 0.94854336977005,
+      "stability_score": 0.9803921580314636,
+      "bbox_xywh": [
+        94,
+        98,
+        51,
+        6
+      ]
+    },
+    {
+      "class_id": 47,
+      "area": 233,
+      "pred_iou": 0.9731831550598145,
+      "stability_score": 0.9789029359817505,
+      "bbox_xywh": [
+        345,
+        181,
+        18,
+        12
+      ]
+    },
+    {
+      "class_id": 48,
+      "area": 218,
+      "pred_iou": 0.9369194507598877,
+      "stability_score": 0.9419642686843872,
+      "bbox_xywh": [
+        82,
+        223,
+        10,
+        27
+      ]
+    },
+    {
+      "class_id": 49,
+      "area": 206,
+      "pred_iou": 0.9309960007667542,
+      "stability_score": 0.9712918400764465,
+      "bbox_xywh": [
+        0,
+        115,
+        8,
+        26
+      ]
+    },
+    {
+      "class_id": 50,
+      "area": 167,
+      "pred_iou": 0.9288722276687622,
+      "stability_score": 0.9822485446929932,
+      "bbox_xywh": [
+        338,
+        105,
+        9,
+        16
+      ]
+    },
+    {
+      "class_id": 51,
+      "area": 155,
+      "pred_iou": 0.9067131280899048,
+      "stability_score": 0.9615384340286255,
+      "bbox_xywh": [
+        7,
+        102,
+        7,
+        20
+      ]
+    },
+    {
+      "class_id": 52,
+      "area": 124,
+      "pred_iou": 0.9515485167503357,
+      "stability_score": 0.984000027179718,
+      "bbox_xywh": [
+        199,
+        161,
+        17,
+        6
+      ]
+    },
+    {
+      "class_id": 53,
+      "area": 91,
+      "pred_iou": 0.8741586208343506,
+      "stability_score": 0.97826087474823,
+      "bbox_xywh": [
+        40,
+        155,
+        6,
+        14
+      ]
+    },
+    {
+      "class_id": 54,
+      "area": 59,
+      "pred_iou": 0.8721468448638916,
+      "stability_score": 0.9833333492279053,
+      "bbox_xywh": [
+        107,
+        165,
+        25,
+        2
+      ]
+    }
+  ]
+}

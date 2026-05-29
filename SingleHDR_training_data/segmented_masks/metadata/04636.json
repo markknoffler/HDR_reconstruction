@@ -1,0 +1,42 @@
+{
+  "file": "04636.jpg",
+  "num_classes": 3,
+  "segments": [
+    {
+      "class_id": 1,
+      "area": 259976,
+      "pred_iou": 1.0332757234573364,
+      "stability_score": 0.9907420873641968,
+      "bbox_xywh": [
+        0,
+        0,
+        511,
+        511
+      ]
+    },
+    {
+      "class_id": 2,
+      "area": 2088,
+      "pred_iou": 0.9416086077690125,
+      "stability_score": 0.9242424368858337,
+      "bbox_xywh": [
+        0,
+        333,
+        46,
+        101
+      ]
+    },
+    {
+      "class_id": 3,
+      "area": 177,
+      "pred_iou": 0.9447785019874573,
+      "stability_score": 0.9670329689979553,
+      "bbox_xywh": [
+        0,
+        331,
+        16,
+        15
+      ]
+    }
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "file": "06249.jpg",
+  "num_classes": 9,
+  "segments": [
+    {
+      "class_id": 1,
+      "area": 124225,
+      "pred_iou": 1.0276494026184082,
+      "stability_score": 0.9851914048194885,
+      "bbox_xywh": [
+        0,
+        0,
+        511,
+        401
+      ]
+    },
+    {
+      "class_id": 2,
+      "area": 91216,
+      "pred_iou": 1.023972988128662,
+      "stability_score": 0.9875048995018005,
+      "bbox_xywh": [
+        0,
+        259,
+        511,
+        252
+      ]
+    },
+    {
+      "class_id": 3,
+      "area": 42407,
+      "pred_iou": 0.9828454256057739,
+      "stability_score": 0.953481912612915,
+      "bbox_xywh": [
+        0,
+        22,
+        283,
+        369
+      ]
+    },
+    {
+      "class_id": 4,
+      "area": 11031,
+      "pred_iou": 0.9669566750526428,
+      "stability_score": 0.927204430103302,
+      "bbox_xywh": [
+        127,
+        209,
+        157,
+        145
+      ]
+    },
+    {
+      "class_id": 5,
+      "area": 3269,
+      "pred_iou": 0.951971709728241,
+      "stability_score": 0.9352369904518127,
+      "bbox_xywh": [
+        0,
+        319,
+        59,
+        86
+      ]
+    },
+    {
+      "class_id": 6,
+      "area": 334,
+      "pred_iou": 0.9497674703598022,
+      "stability_score": 0.9528023600578308,
+      "bbox_xywh": [
+        0,
+        390,
+        32,
+        18
+      ]
+    },
+    {
+      "class_id": 7,
+      "area": 152,
+      "pred_iou": 0.9473505020141602,
+      "stability_score": 0.9803921580314636,
+      "bbox_xywh": [
+        74,
+        370,
+        14,
+        12
+      ]
+    },
+    {
+      "class_id": 8,
+      "area": 36,
+      "pred_iou": 0.9093417525291443,
+      "stability_score": 1.0,
+      "bbox_xywh": [
+        148,
+        178,
+        7,
+        5
+      ]
+    },
+    {
+      "class_id": 9,
+      "area": 16,
+      "pred_iou": 0.8950328230857849,
+      "stability_score": 1.0,
+      "bbox_xywh": [
+        166,
+        230,
+        3,
+        4
+      ]
+    }
+  ]
+}

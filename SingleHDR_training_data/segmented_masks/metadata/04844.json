@@ -1,0 +1,78 @@
+{
+  "file": "04844.jpg",
+  "num_classes": 6,
+  "segments": [
+    {
+      "class_id": 1,
+      "area": 220283,
+      "pred_iou": 1.0174943208694458,
+      "stability_score": 0.9677574038505554,
+      "bbox_xywh": [
+        0,
+        0,
+        511,
+        511
+      ]
+    },
+    {
+      "class_id": 2,
+      "area": 39359,
+      "pred_iou": 1.0019946098327637,
+      "stability_score": 0.9754505753517151,
+      "bbox_xywh": [
+        0,
+        0,
+        511,
+        294
+      ]
+    },
+    {
+      "class_id": 3,
+      "area": 24033,
+      "pred_iou": 1.0060200691223145,
+      "stability_score": 0.9902715682983398,
+      "bbox_xywh": [
+        0,
+        0,
+        158,
+        296
+      ]
+    },
+    {
+      "class_id": 4,
+      "area": 15168,
+      "pred_iou": 1.005519986152649,
+      "stability_score": 0.9743673205375671,
+      "bbox_xywh": [
+        277,
+        0,
+        234,
+        223
+      ]
+    },
+    {
+      "class_id": 5,
+      "area": 2056,
+      "pred_iou": 0.9446227550506592,
+      "stability_score": 0.9288056492805481,
+      "bbox_xywh": [
+        354,
+        453,
+        43,
+        58
+      ]
+    },
+    {
+      "class_id": 6,
+      "area": 478,
+      "pred_iou": 0.9277454614639282,
+      "stability_score": 0.9588477611541748,
+      "bbox_xywh": [
+        108,
+        235,
+        20,
+        25
+      ]
+    }
+  ]
+}
