@@ -163,6 +163,17 @@ def main():
         default=100,
         help="Number of train images used each epoch for train-set metric probe.",
     )
+    parser.add_argument(
+        "--trial_val_samples",
+        type=int,
+        default=5,
+        help="Val images for a trial validation run before epoch 1 (inference + PSNR/SSIM/HDR-VDP).",
+    )
+    parser.add_argument(
+        "--skip_trial_validation",
+        action="store_true",
+        help="Skip the pre-training trial validation (use when resuming/debugging).",
+    )
     parser.add_argument("--use_real_hdrvdp", action="store_true")
     parser.add_argument(
         "--no_vae_slicing",
@@ -266,6 +277,10 @@ def main():
     print(f"  Checkpoints     : latest.pt every epoch; epoch_<N>.pt every {args.save_ckpt_after} epochs")
     print(f"  Full validation : every {args.full_val_every} epochs (+ final epoch)")
     print(f"  Train probe     : {args.train_eval_samples} train images per epoch")
+    if start_epoch == 1 and not args.skip_trial_validation:
+        print(f"  Trial validation: {args.trial_val_samples} val images before epoch 1")
+    elif args.skip_trial_validation:
+        print("  Trial validation: skipped (--skip_trial_validation)")
     if args.torch_dtype == "float32" and not args.amp:
         print(
             "  [VRAM] float32 without --amp uses ~2x memory. "
@@ -274,6 +289,48 @@ def main():
         )
 
     predict_fn = make_stage1_instruct_predictor(model, num_inference_steps=args.val_inference_steps)
+
+    if start_epoch == 1 and not args.skip_trial_validation:
+        if val_loader is None:
+            print("[WARN] Trial validation skipped: no validation split.")
+        else:
+            n_trial = max(1, int(args.trial_val_samples))
+            trial_loader = _make_train_subset_loader(
+                val_loader,
+                sample_count=n_trial,
+                num_workers=args.num_workers,
+                seed=args.val_export_seed,
+            )
+            if trial_loader is None:
+                print("[WARN] Trial validation skipped: empty val indices.")
+            else:
+                n_run = len(trial_loader.dataset)
+                print("\n" + "=" * 60)
+                print(f"Trial validation before epoch 1 ({n_run} val images)")
+                print("=" * 60)
+                model.eval()
+                if device.type == "cuda":
+                    torch.cuda.empty_cache()
+                trial_psnr, trial_ssim, trial_h2, trial_h3 = validate_model_mtraining(
+                    trial_loader,
+                    device,
+                    epoch=0,
+                    hdrvdp_calculator=hdrvdp_calculator,
+                    predict_hdr=predict_fn,
+                    validation_root=validation_root,
+                    save_samples=True,
+                    max_samples=min(3, n_run),
+                    amp=args.amp,
+                )
+                print(
+                    f"  Trial PSNR/SSIM/HDRVDP2/HDRVDP3: "
+                    f"{trial_psnr:.4f} / {trial_ssim:.4f} / {trial_h2:.4f} / {trial_h3:.4f}"
+                )
+                print(f"  Trial exports: {os.path.join(validation_root, 'epoch_0')}")
+                print("Trial validation finished — starting epoch 1.\n" + "=" * 60 + "\n")
+                model.train()
+                if device.type == "cuda":
+                    torch.cuda.empty_cache()
 
     for epoch in range(start_epoch, args.epochs + 1):
         if epoch <= args.diffusion_only_epochs:

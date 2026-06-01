@@ -42,7 +42,9 @@ python -m model.training_scripts.train_stage1_instruct_finetune \
   --continue_train   # optional resume from latest.pt
 ```
 
-**Each epoch:** full validation PSNR / SSIM / HDR-VDP-2 / HDR-VDP-3 → `training_metrics.csv`; `validation_results/epoch_N/`; `latest.pt`.
+**Before epoch 1:** trial validation on a few val images (default 5) → metrics + `validation_results/epoch_0/` (skip with `--skip_trial_validation`).
+
+**Each epoch:** train-probe + periodic full val → `training_metrics.csv`; `validation_results/epoch_N/`; `latest.pt`.
 
 **Every 5 epochs:** `epoch_5.pt`, `epoch_10.pt`, … (plus `best.pt` when PSNR improves).
 
