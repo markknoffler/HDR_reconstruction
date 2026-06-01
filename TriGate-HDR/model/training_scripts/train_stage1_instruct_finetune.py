@@ -355,7 +355,12 @@ def main():
         )
         tr_psnr, tr_ssim, tr_hdrvdp2, tr_hdrvdp3 = 0.0, 0.0, 0.0, 0.0
         if train_probe_loader is not None:
-            print(f"Train-probe metrics on {len(train_probe_loader.dataset)} samples...")
+            n_probe = len(train_probe_loader.dataset)
+            n_train = len(train_loader.dataset)
+            print(
+                f"Train-probe metrics on {n_probe} samples "
+                f"(requested {args.train_eval_samples}, train split size {n_train})..."
+            )
             tr_psnr, tr_ssim, tr_hdrvdp2, tr_hdrvdp3 = validate_model_mtraining(
                 train_probe_loader,
                 device,

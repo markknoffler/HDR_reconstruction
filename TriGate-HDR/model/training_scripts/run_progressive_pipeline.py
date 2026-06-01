@@ -97,7 +97,7 @@ def main():
             optimizer.step()
             running += loss.item()
             for i in range(fake.shape[0]):
-                psnr, ssim = compute_psnr_ssim(fake[i], hdr_gt[i], total_psnr, total_ssim)
+                psnr, ssim = compute_psnr_ssim(fake[i], hdr_gt[i])
                 hdrvdp2 = hdrvdp_calculator.compute_hdrvdp2(fake[i], hdr_gt[i])
                 hdrvdp3 = hdrvdp_calculator.compute_hdrvdp3(fake[i], hdr_gt[i])
                 total_psnr += psnr

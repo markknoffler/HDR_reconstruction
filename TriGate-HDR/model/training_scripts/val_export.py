@@ -67,8 +67,9 @@ def validate_model_mtraining(
 
         with autocast("cuda", enabled=amp and device.type == "cuda"):
             hdr_pred = predict_hdr(batch, input_ldr, ground_truth, device)
-        hdr_pred = sanitize_hdr_tensor(hdr_pred)
-        ground_truth = sanitize_hdr_tensor(ground_truth)
+        # Metrics: FHDR/test.py — no sanitize/clamp before PSNR-μ / SSIM
+        hdr_pred = hdr_pred.float()
+        ground_truth = ground_truth.float()
 
         if save_samples and sample_count < max_samples:
             for i in range(min(hdr_pred.shape[0], max_samples - sample_count)):
@@ -86,14 +87,11 @@ def validate_model_mtraining(
         for i in range(hdr_pred.shape[0]):
             pred_img = hdr_pred[i]
             gt_img = ground_truth[i]
-            if not torch.isfinite(pred_img).all():
-                print("[WARN] non-finite prediction skipped in metrics")
-                continue
             psnr, ssim = compute_psnr_ssim(pred_img, gt_img)
             h2 = hdrvdp_calculator.compute_hdrvdp2(pred_img, gt_img)
             h3 = hdrvdp_calculator.compute_hdrvdp3(pred_img, gt_img)
-            total_psnr += _finite_metric(psnr)
-            total_ssim += _finite_metric(ssim)
+            total_psnr += psnr
+            total_ssim += ssim
             total_hdrvdp2 += _finite_metric(h2)
             total_hdrvdp3 += _finite_metric(h3)
             num_samples += 1

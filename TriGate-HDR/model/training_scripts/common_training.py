@@ -4,10 +4,13 @@ import os
 import cv2
 import numpy as np
 import torch
-from skimage.metrics import structural_similarity as compare_ssim
+
+# Must match FHDR/test.py line 7 (no alternate skimage API / no safe-SSIM wrapper).
+from skimage.measure import compare_ssim
 
 
 def mu_tonemap(img):
+    """Same as FHDR/util.py (μ-law tonemap, MU=5000)."""
     mu = 5000.0
     return torch.log(1.0 + mu * (img + 1.0) / 2.0) / np.log(1.0 + mu)
 
@@ -16,63 +19,34 @@ def mse_loss(pred, target):
     return torch.mean((pred - target) ** 2)
 
 
-def _safe_ssim(generated, real):
-    """SSIM with skimage API compatibility and small-image win_size handling."""
-    generated = np.clip(generated, 0.0, 1.0)
-    real = np.clip(real, 0.0, 1.0)
-    min_side = min(generated.shape[0], generated.shape[1])
-    if min_side < 3:
-        return 0.0
-    win_size = min(7, min_side)
-    if win_size % 2 == 0:
-        win_size = max(3, win_size - 1)
-    channel_axis = -1 if generated.ndim == 3 else None
-    try:
-        return float(
-            compare_ssim(
-                generated,
-                real,
-                channel_axis=channel_axis,
-                win_size=win_size,
-                data_range=1.0,
-            )
-        )
-    except TypeError:
-        # Older scikit-image
-        kwargs = {"win_size": win_size, "data_range": 1.0}
-        if generated.ndim == 3:
-            kwargs["multichannel"] = True
-        return float(compare_ssim(generated, real, **kwargs))
-
-
 def _finite_metric(x, default=0.0):
     x = float(x)
     return x if np.isfinite(x) else default
 
 
 def sanitize_hdr_tensor(t):
-    """FP32 + clamp before metrics (AMP can produce inf/nan)."""
+    """For saving/visualization only — not used in FHDR-aligned PSNR/SSIM."""
     return torch.nan_to_num(t.float(), nan=0.0, posinf=1.0, neginf=-1.0).clamp(-1.0, 1.0)
 
 
-def compute_psnr_ssim(pred, gt):
-    """PSNR-mu + SSIM (ARThdrNet/m_training.py PSNR; robust SSIM for smoke/small crops)."""
-    pred = sanitize_hdr_tensor(pred)
-    gt = sanitize_hdr_tensor(gt)
-    pred_batch = pred.unsqueeze(0)
-    gt_batch = gt.unsqueeze(0)
-    mu_tonemap_gt = mu_tonemap(gt_batch)
-    mu_tonemap_pred = mu_tonemap(pred_batch)
-    mse = mse_loss(mu_tonemap_pred, mu_tonemap_gt)
-    mse_val = float(mse.item())
-    if not np.isfinite(mse_val) or mse_val <= 1e-12:
-        psnr = 60.0 if mse_val <= 1e-12 else 0.0
-    else:
-        psnr = 10.0 * np.log10(1.0 / mse_val)
+def compute_psnr_ssim_fhdr(pred, gt):
+    """
+    PSNR-μ and SSIM exactly as FHDR/test.py (lines 101–119).
+    `pred` / `gt`: CHW tensors in the same [-1, 1] HDR space as FHDR ground_truth / output.
+    """
+    mu_tonemap_gt = mu_tonemap(gt)
+    mse = mse_loss(mu_tonemap(pred), mu_tonemap_gt)
+    psnr = 10 * np.log10(1 / mse.item())
+
     generated = (np.transpose(pred.cpu().numpy(), (1, 2, 0)) + 1) / 2.0
     real = (np.transpose(gt.cpu().numpy(), (1, 2, 0)) + 1) / 2.0
-    ssim = _safe_ssim(generated, real)
-    return _finite_metric(psnr), _finite_metric(ssim)
+    ssim = compare_ssim(generated, real, multichannel=True)
+    return float(psnr), float(ssim)
+
+
+def compute_psnr_ssim(pred, gt):
+    """Training/validation entry point (FHDR/test.py semantics, no sanitization or fallbacks)."""
+    return compute_psnr_ssim_fhdr(pred.detach().float(), gt.detach().float())
 
 
 def write_hdr(hdr_image, path):
