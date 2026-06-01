@@ -58,7 +58,7 @@ python -m model.training_scripts.train_stage1_instruct_finetune --smoke_test
 
 Uses `validate_model_mtraining` (PSNR-μ, SSIM, HDR-VDP-2/3) and exports `validation_results/epoch_*` like ARThdrNet `m_training.py`.
 
-**PSNR / SSIM** are computed exactly as `FHDR/test.py` (`mu_tonemap` + `10*log10(1/mse)`, `skimage.measure.compare_ssim(..., multichannel=True)`). No sanitize, PSNR caps, or safe-SSIM fallbacks on the metric path.
+**PSNR / SSIM** follow `FHDR/test.py` (`mu_tonemap` + `10*log10(1/mse)`, `compare_ssim(..., multichannel=True)`). On newer scikit-image, `compare_ssim` lives in `skimage.metrics.structural_similarity` (same call via `fhdr_compare_ssim`). No sanitize, PSNR caps, or adaptive-window SSIM on the metric path.
 
 Verify on the training machine (same `skimage` as FHDR):
 

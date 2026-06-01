@@ -9,9 +9,14 @@ from __future__ import annotations
 
 import numpy as np
 import torch
-from skimage.measure import compare_ssim
 
-from .common_training import compute_psnr_ssim, compute_psnr_ssim_fhdr, mse_loss, mu_tonemap
+from .common_training import (
+    compute_psnr_ssim,
+    compute_psnr_ssim_fhdr,
+    fhdr_compare_ssim,
+    mse_loss,
+    mu_tonemap,
+)
 
 
 def _fhdr_test_py_inline(pred: torch.Tensor, gt: torch.Tensor):
@@ -21,7 +26,7 @@ def _fhdr_test_py_inline(pred: torch.Tensor, gt: torch.Tensor):
     psnr = 10 * np.log10(1 / mse.item())
     generated = (np.transpose(pred.cpu().numpy(), (1, 2, 0)) + 1) / 2.0
     real = (np.transpose(gt.cpu().numpy(), (1, 2, 0)) + 1) / 2.0
-    ssim = compare_ssim(generated, real, multichannel=True)
+    ssim = fhdr_compare_ssim(generated, real)
     return float(psnr), float(ssim)
 
 

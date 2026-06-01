@@ -5,8 +5,24 @@ import cv2
 import numpy as np
 import torch
 
-# Must match FHDR/test.py line 7 (no alternate skimage API / no safe-SSIM wrapper).
-from skimage.measure import compare_ssim
+def fhdr_compare_ssim(generated: np.ndarray, real: np.ndarray) -> float:
+    """
+    FHDR/test.py line 119: compare_ssim(generated, real, multichannel=True).
+
+    Older scikit-image: skimage.measure.compare_ssim.
+    Newer scikit-image (>=0.20): same call via skimage.metrics.structural_similarity
+    (measure.compare_ssim was removed). No clipping, adaptive win_size, or metric fallbacks.
+    """
+    try:
+        from skimage.measure import compare_ssim as _compare_ssim
+    except ImportError:
+        from skimage.metrics import structural_similarity as _compare_ssim
+
+    try:
+        return float(_compare_ssim(generated, real, multichannel=True))
+    except TypeError:
+        # structural_similarity: multichannel= -> channel_axis= for HWC RGB
+        return float(_compare_ssim(generated, real, channel_axis=2))
 
 
 def mu_tonemap(img):
@@ -40,7 +56,7 @@ def compute_psnr_ssim_fhdr(pred, gt):
 
     generated = (np.transpose(pred.cpu().numpy(), (1, 2, 0)) + 1) / 2.0
     real = (np.transpose(gt.cpu().numpy(), (1, 2, 0)) + 1) / 2.0
-    ssim = compare_ssim(generated, real, multichannel=True)
+    ssim = fhdr_compare_ssim(generated, real)
     return float(psnr), float(ssim)
 
 
