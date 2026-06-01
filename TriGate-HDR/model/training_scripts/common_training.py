@@ -216,15 +216,37 @@ def save_metrics_to_csv(csv_path, epoch, train_loss, val_psnr, val_ssim, val_hdr
         )
 
 
-def maybe_resume(checkpoint_dir, model, optimizer):
-    latest = os.path.join(checkpoint_dir, "latest.pt")
-    if not os.path.exists(latest):
+def maybe_resume(checkpoint_dir, model, optimizer, resume_from: str = ""):
+    """
+    Load weights/optimizer and return the next epoch to run.
+
+    Uses resume_from if set, else checkpoint_dir/latest.pt.
+    If nothing is found, returns start_epoch=1 (fresh run).
+    """
+    checkpoint_dir = sanitize_data_path(checkpoint_dir)
+    if resume_from:
+        latest = sanitize_data_path(resume_from)
+    else:
+        latest = os.path.join(checkpoint_dir, "latest.pt")
+
+    if not os.path.isfile(latest):
+        print(
+            f"[resume] No checkpoint at {latest!r} — starting from epoch 1.\n"
+            f"         Expected finished run: {os.path.join(checkpoint_dir, 'latest.pt')}"
+        )
         return 1, 0.0, 0.0, 0.0, 0.0
+
     ckpt = torch.load(latest, map_location="cpu")
     model.load_state_dict(ckpt["model"])
     optimizer.load_state_dict(ckpt["optimizer"])
+    last_epoch = int(ckpt.get("epoch", 0))
+    start_epoch = last_epoch + 1
+    print(
+        f"[resume] Loaded {latest}\n"
+        f"         last completed epoch={last_epoch} -> continuing at epoch {start_epoch}"
+    )
     return (
-        ckpt["epoch"] + 1,
+        start_epoch,
         ckpt.get("best_val_psnr", 0.0),
         ckpt.get("best_val_ssim", 0.0),
         ckpt.get("best_val_hdrvdp2", 0.0),
@@ -329,6 +351,34 @@ def add_subset_args(parser):
         default=0,
         help="Cap validation images (0=no cap). smoke_test sets 4 if unset.",
     )
+
+
+def sanitize_data_path(path: str) -> str:
+    """Strip whitespace/newlines from CLI paths (common copy-paste line-wrap bug)."""
+    if not path:
+        return path
+    cleaned = path.replace("\n", "").replace("\r", "").strip()
+    # Shell wrapped "SingleHDR_training_data" -> "SingleHD" + newline + "R_training_data"
+    for broken, fixed in (
+        ("SingleHD  R_training_data", "SingleHDR_training_data"),
+        ("SingleHD R_training_data", "SingleHDR_training_data"),
+        ("Sin gleHDR_training_data", "SingleHDR_training_data"),
+    ):
+        cleaned = cleaned.replace(broken, fixed)
+    return os.path.normpath(cleaned)
+
+
+def default_hrishav_data_paths():
+    """Canonical HDR-Real paths for this project (avoids fragile long CLI strings)."""
+    root = "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR"
+    data = os.path.join(root, "SingleHDR_training_data")
+    repo = os.path.join(root, "TriGate-HDR")
+    return {
+        "ldr_dir": os.path.join(data, "HDR-Real", "LDR_in"),
+        "hdr_dir": os.path.join(data, "HDR-Real", "HDR_gt"),
+        "sam_mask_dir": os.path.join(data, "segmented_masks"),
+        "checkpoint_dir": os.path.join(repo, "experiments", "stage1_instruct"),
+    }
 
 
 def apply_smoke_test_args(args):

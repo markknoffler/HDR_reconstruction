@@ -14,6 +14,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ..decoders.stable_diffusion_utils import (
+    configure_vae_memory_efficient,
     freeze_module,
     prepare_diffusion_pipeline_for_inference,
     require_diffusers,
@@ -91,14 +92,9 @@ class TrainableTriGateInstructPix2PixStage1(nn.Module):
             safety_checker=None,
             requires_safety_checker=False,
         )
-        try:
-            pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(
-                model_id, dtype=dtype, **load_kw
-            )
-        except TypeError:
-            pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(
-                model_id, torch_dtype=dtype, **load_kw
-            )
+        pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(
+            model_id, torch_dtype=dtype, **load_kw
+        )
         prepare_diffusion_pipeline_for_inference(pipe, force_vae_fp32=True)
 
         if device is not None:
@@ -122,6 +118,12 @@ class TrainableTriGateInstructPix2PixStage1(nn.Module):
         )
         # TriGate cond_injector is created after pipe.to(); move entire module tree to dev.
         model = model.to(dev)
+        configure_vae_memory_efficient(model.vae)
+        if hasattr(model.unet, "enable_gradient_checkpointing"):
+            try:
+                model.unet.enable_gradient_checkpointing()
+            except Exception:
+                pass
         model._inference_pipeline = pipe
         return model
 
@@ -191,9 +193,15 @@ class TrainableTriGateInstructPix2PixStage1(nn.Module):
         latents = dist.sample() if sample else dist.mode()
         return latents * self._scaling_factor
 
-    def _vae_decode_latents(self, latents: torch.Tensor) -> torch.Tensor:
+    def _vae_decode_latents(self, latents: torch.Tensor, gradient_checkpoint: bool = False) -> torch.Tensor:
         latents = latents.to(dtype=torch.float32) / self._scaling_factor
-        return self.vae.decode(latents).sample
+
+        def _decode(z: torch.Tensor) -> torch.Tensor:
+            return self.vae.decode(z).sample
+
+        if gradient_checkpoint and self.training:
+            return torch.utils.checkpoint.checkpoint(_decode, latents, use_reentrant=False)
+        return _decode(latents)
 
     def _ldr_to_vae(self, ldr_01: torch.Tensor) -> torch.Tensor:
         return (2.0 * ldr_01.clamp(0.0, 1.0) - 1.0).clamp(-1.0, 1.0)
@@ -233,7 +241,9 @@ class TrainableTriGateInstructPix2PixStage1(nn.Module):
         )
         noisy_latents = self.scheduler.add_noise(latents, noise, timesteps)
 
-        image_latents = self.cond_injector(ldr, image_latents, timesteps, segmap=segmap)
+        image_latents, gate, class_probs, aux = self.cond_injector(
+            ldr, image_latents, timesteps, segmap=segmap, return_aux=True
+        )
         concat = torch.cat([noisy_latents, image_latents], dim=1)
 
         pred_noise = self.unet(
@@ -253,11 +263,8 @@ class TrainableTriGateInstructPix2PixStage1(nn.Module):
 
         if novelty_w > 0 and decode_for_novelty:
             pred_x0 = predict_x0_from_noise(self.scheduler, noisy_latents, pred_noise, timesteps)
-            pred_rgb = self._vae_decode_latents(pred_x0)
+            pred_rgb = self._vae_decode_latents(pred_x0, gradient_checkpoint=True)
             pred_hdr = pred_rgb.clamp(-1.0, 1.0)
-
-            _, struct_feat, gate, _, _, class_probs, aux = self.cond_injector.encoders(ldr, segmap)
-            del struct_feat
             loss_nov, nov_parts = novelty_losses(
                 pred_hdr,
                 hdr,

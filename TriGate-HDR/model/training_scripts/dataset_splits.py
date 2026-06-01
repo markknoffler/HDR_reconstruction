@@ -7,6 +7,7 @@ from typing import List, Tuple
 import numpy as np
 from torch.utils.data import DataLoader, Subset
 
+from .common_training import sanitize_data_path
 from .data_loader import TriGateHDRDataset
 
 
@@ -82,6 +83,18 @@ def build_dataloaders(
     max_train_samples: int = 0,
     max_val_samples: int = 0,
 ):
+    ldr_dir = sanitize_data_path(ldr_dir)
+    hdr_dir = sanitize_data_path(hdr_dir)
+    sam_mask_dir = sanitize_data_path(sam_mask_dir) if sam_mask_dir else ""
+    if not os.path.isdir(ldr_dir):
+        raise FileNotFoundError(
+            f"LDR directory not found: {ldr_dir!r}\n"
+            "Check --ldr_dir is one line (no line break inside the path). "
+            "Expected folder name: SingleHDR_training_data/HDR-Real/LDR_in"
+        )
+    if not os.path.isdir(hdr_dir):
+        raise FileNotFoundError(f"HDR directory not found: {hdr_dir!r}")
+
     full_dataset = TriGateHDRDataset(
         ldr_dir,
         hdr_dir,

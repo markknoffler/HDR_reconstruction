@@ -80,6 +80,9 @@ def validate_model_mtraining(
                 save_hdr_image(ground_truth, i, gt_path)
                 sample_count += 1
 
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
+
         for i in range(hdr_pred.shape[0]):
             pred_img = hdr_pred[i]
             gt_img = ground_truth[i]

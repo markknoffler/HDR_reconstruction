@@ -26,7 +26,9 @@ from .common_training import (
     HDRVDPMetrics,
     add_subset_args,
     apply_smoke_test_args,
+    default_hrishav_data_paths,
     maybe_resume,
+    sanitize_data_path,
     print_epoch_summary,
     save_best_checkpoint,
     save_checkpoint,
@@ -112,16 +114,20 @@ def _make_train_subset_loader(train_loader, sample_count: int, num_workers: int,
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Fine-tune Stage-1 InstructPix2Pix + TriGate encoders.")
+    _defaults = default_hrishav_data_paths()
+    parser = argparse.ArgumentParser(
+        description="Fine-tune Stage-1 InstructPix2Pix + TriGate encoders.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     parser.add_argument("--epochs", type=int, default=60)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--lora_lr", type=float, default=1e-4)
     parser.add_argument("--encoder_lr", type=float, default=2e-4)
-    parser.add_argument("--checkpoint_dir", type=str, default="checkpoints_stage1_instruct")
-    parser.add_argument("--ldr_dir", type=str, required=False, default="")
-    parser.add_argument("--hdr_dir", type=str, required=False, default="")
+    parser.add_argument("--checkpoint_dir", type=str, default=_defaults["checkpoint_dir"])
+    parser.add_argument("--ldr_dir", type=str, default=_defaults["ldr_dir"])
+    parser.add_argument("--hdr_dir", type=str, default=_defaults["hdr_dir"])
     parser.add_argument("--batch_size", type=int, default=1)
-    parser.add_argument("--sam_mask_dir", type=str, default="")
+    parser.add_argument("--sam_mask_dir", type=str, default=_defaults["sam_mask_dir"])
     parser.add_argument("--max_sam_classes", type=int, default=64)
     parser.add_argument("--max_dim", type=int, default=0)
     parser.add_argument("--num_workers", type=int, default=4)
@@ -130,6 +136,13 @@ def main():
         "--continue_train",
         action="store_true",
         help="Resume from checkpoint_dir/latest.pt (epoch, weights, optimizer).",
+    )
+    parser.add_argument(
+        "--resume_from",
+        type=str,
+        default="",
+        help="Optional explicit .pt (e.g. experiments/stage1_instruct/epoch_5.pt). "
+        "Overrides latest.pt when used with --continue_train.",
     )
     parser.add_argument("--model_id", type=str, default="timbrooks/instruct-pix2pix")
     parser.add_argument("--torch_dtype", type=str, default="float32", choices=["float32", "float16", "bfloat16"])
@@ -151,9 +164,25 @@ def main():
         help="Number of train images used each epoch for train-set metric probe.",
     )
     parser.add_argument("--use_real_hdrvdp", action="store_true")
+    parser.add_argument(
+        "--no_vae_slicing",
+        action="store_true",
+        help="Disable VAE slice/tiling (uses more VRAM during novelty decode).",
+    )
+    parser.add_argument(
+        "--clear_cuda_cache_each_step",
+        action="store_true",
+        help="torch.cuda.empty_cache() each train step when novelty loss is active.",
+    )
     add_subset_args(parser)
     args = parser.parse_args()
     args = apply_smoke_test_args(args)
+
+    args.ldr_dir = sanitize_data_path(args.ldr_dir)
+    args.hdr_dir = sanitize_data_path(args.hdr_dir)
+    args.sam_mask_dir = sanitize_data_path(args.sam_mask_dir) if args.sam_mask_dir else ""
+    args.checkpoint_dir = sanitize_data_path(args.checkpoint_dir)
+    args.resume_from = sanitize_data_path(args.resume_from) if args.resume_from else ""
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     os.makedirs(args.checkpoint_dir, exist_ok=True)
@@ -171,6 +200,12 @@ def main():
         lora_rank=args.lora_rank,
     )
     model = model.to(device)
+    if args.no_vae_slicing and hasattr(model.vae, "disable_slicing"):
+        try:
+            model.vae.disable_slicing()
+            model.vae.disable_tiling()
+        except Exception:
+            pass
 
     lora_params = [p for n, p in model.unet.named_parameters() if p.requires_grad]
     enc_params = [p for p in model.cond_injector.parameters() if p.requires_grad]
@@ -187,18 +222,23 @@ def main():
     start_epoch = 1
     best_psnr, best_ssim = 0.0, 0.0
     best_hdrvdp2, best_hdrvdp3 = 0.0, 0.0
+    print(f"  Checkpoints     : {args.checkpoint_dir}")
     if args.continue_train:
         start_epoch, best_psnr, best_ssim, best_hdrvdp2, best_hdrvdp3 = maybe_resume(
-            args.checkpoint_dir, model, optimizer
+            args.checkpoint_dir,
+            model,
+            optimizer,
+            resume_from=args.resume_from,
         )
         model = model.to(device)
         print(
-            f"Resuming from epoch {start_epoch} "
+            f"Resuming training at epoch {start_epoch}/{args.epochs} "
             f"(best PSNR={best_psnr:.4f}, SSIM={best_ssim:.4f})"
         )
 
-    if not args.ldr_dir or not args.hdr_dir:
-        raise SystemExit("Provide --ldr_dir and --hdr_dir (or use --smoke_test with defaults).")
+    print(f"  LDR dir         : {args.ldr_dir}")
+    print(f"  HDR dir         : {args.hdr_dir}")
+    print(f"  SAM masks       : {args.sam_mask_dir}")
 
     train_loader, val_loader, full_dataset, val_indices = build_dataloaders(
         args.ldr_dir,
@@ -226,6 +266,12 @@ def main():
     print(f"  Checkpoints     : latest.pt every epoch; epoch_<N>.pt every {args.save_ckpt_after} epochs")
     print(f"  Full validation : every {args.full_val_every} epochs (+ final epoch)")
     print(f"  Train probe     : {args.train_eval_samples} train images per epoch")
+    if args.torch_dtype == "float32" and not args.amp:
+        print(
+            "  [VRAM] float32 without --amp uses ~2x memory. "
+            f"Novelty VAE decode starts after epoch {args.diffusion_only_epochs} "
+            "(often OOM on 20GB). Try: --amp --train_eval_samples 20"
+        )
 
     predict_fn = make_stage1_instruct_predictor(model, num_inference_steps=args.val_inference_steps)
 
@@ -234,6 +280,22 @@ def main():
             model.set_training_phase(1)
         else:
             model.set_training_phase(2)
+
+        novelty_w_ep = 0.0
+        if epoch > args.diffusion_only_epochs:
+            from ..instructpix2pix_pretrained_finetuned_stage1.losses import curriculum_novelty_weight
+
+            novelty_w_ep = curriculum_novelty_weight(
+                epoch,
+                args.diffusion_only_epochs,
+                args.novelty_ramp_epochs,
+                args.max_novelty_weight,
+            )
+        if novelty_w_ep > 0 and epoch == args.diffusion_only_epochs + 1:
+            print(
+                f"\n[VRAM] Epoch {epoch}+: novelty loss active — extra full VAE decode each step. "
+                "VAE slice/tiling + UNet grad-checkpoint enabled.\n"
+            )
 
         epoch_start = time.time()
         model.train()
@@ -265,6 +327,12 @@ def main():
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
+            if (
+                args.clear_cuda_cache_each_step
+                and device.type == "cuda"
+                and float(parts.get("novelty_weight", torch.tensor(0.0))) > 0
+            ):
+                torch.cuda.empty_cache()
             running += loss.item()
             diff_v = parts.get("diffusion", torch.tensor(0.0))
             pbar.set_postfix(
@@ -277,6 +345,8 @@ def main():
         epoch_time = time.time() - epoch_start
 
         model.eval()
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
         train_probe_loader = _make_train_subset_loader(
             train_loader,
             sample_count=max(1, int(args.train_eval_samples)),

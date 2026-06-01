@@ -71,6 +71,22 @@ def sd_output_to_trigate_hdr_range(pred_01: torch.Tensor) -> torch.Tensor:
     return (2.0 * pred_01.clamp(0.0, 1.0) - 1.0).clamp(-1.0, 1.0)
 
 
+def configure_vae_memory_efficient(vae) -> None:
+    """Slice/tiling on VAE decode — critical for 512px + novelty loss on ~20GB GPUs."""
+    if vae is None:
+        return
+    if hasattr(vae, "enable_slicing"):
+        try:
+            vae.enable_slicing()
+        except Exception:
+            pass
+    if hasattr(vae, "enable_tiling"):
+        try:
+            vae.enable_tiling()
+        except Exception:
+            pass
+
+
 def prepare_diffusion_pipeline_for_inference(pipeline, force_vae_fp32: bool = True) -> None:
     """
     FP16 UNet + FP16 VAE decode often yields NaNs / flat white images on InstructPix2Pix.
@@ -78,6 +94,7 @@ def prepare_diffusion_pipeline_for_inference(pipeline, force_vae_fp32: bool = Tr
     """
     if force_vae_fp32 and hasattr(pipeline, "vae") and pipeline.vae is not None:
         pipeline.vae.to(dtype=torch.float32)
+        configure_vae_memory_efficient(pipeline.vae)
     if hasattr(pipeline, "upcast_vae"):
         try:
             pipeline.upcast_vae()

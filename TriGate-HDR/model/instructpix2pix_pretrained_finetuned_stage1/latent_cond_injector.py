@@ -59,10 +59,14 @@ class LatentCondInjector(nn.Module):
         image_latents: torch.Tensor,
         timesteps: torch.Tensor,
         segmap=None,
+        return_aux: bool = False,
     ):
         dev = image_latents.device
         timesteps = timesteps.to(device=dev)
         t_emb = self.time_mlp(timesteps)
-        mat_feat, struct_feat, _, sem_feats, mask_feats, _, _ = self.encoders(ldr, segmap)
+        mat_feat, struct_feat, gate, sem_feats, mask_feats, class_probs, aux = self.encoders(ldr, segmap)
         delta = self.fusion(image_latents, t_emb, mat_feat, struct_feat, sem_feats[3], mask_feats[3])
-        return image_latents + self.res_scale * delta
+        out = image_latents + self.res_scale * delta
+        if return_aux:
+            return out, gate, class_probs, aux
+        return out
