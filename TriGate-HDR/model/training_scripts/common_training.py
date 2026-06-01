@@ -9,20 +9,25 @@ def fhdr_compare_ssim(generated: np.ndarray, real: np.ndarray) -> float:
     """
     FHDR/test.py line 119: compare_ssim(generated, real, multichannel=True).
 
-    Older scikit-image: skimage.measure.compare_ssim.
-    Newer scikit-image (>=0.20): same call via skimage.metrics.structural_similarity
-    (measure.compare_ssim was removed). No clipping, adaptive win_size, or metric fallbacks.
+    Legacy scikit-image: skimage.measure.compare_ssim (multichannel=True on HWC RGB).
+    Newer scikit-image: skimage.metrics.structural_similarity with channel_axis=2 only.
+    Do not pass multichannel=True to structural_similarity — it treats C as spatial and
+    raises win_size errors on normal images.
     """
     try:
-        from skimage.measure import compare_ssim as _compare_ssim
-    except ImportError:
-        from skimage.metrics import structural_similarity as _compare_ssim
+        from skimage.measure import compare_ssim
 
-    try:
-        return float(_compare_ssim(generated, real, multichannel=True))
-    except TypeError:
-        # structural_similarity: multichannel= -> channel_axis= for HWC RGB
-        return float(_compare_ssim(generated, real, channel_axis=2))
+        return float(compare_ssim(generated, real, multichannel=True))
+    except ImportError:
+        from skimage.metrics import structural_similarity
+
+        kwargs = {"channel_axis": 2}
+        min_side = int(min(generated.shape[0], generated.shape[1]))
+        if min_side < 7:
+            # Same constraint as skimage default win_size=7; only for very thin crops.
+            win = min_side if (min_side % 2) else min_side - 1
+            kwargs["win_size"] = max(3, win)
+        return float(structural_similarity(generated, real, **kwargs))
 
 
 def mu_tonemap(img):
