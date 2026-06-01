@@ -21,7 +21,8 @@ def fhdr_compare_ssim(generated: np.ndarray, real: np.ndarray) -> float:
     except ImportError:
         from skimage.metrics import structural_similarity
 
-        kwargs = {"channel_axis": 2}
+        # FHDR/test.py: SSIM on (pred+1)/2 and (gt+1)/2 -> float RGB in [0, 1].
+        kwargs = {"channel_axis": 2, "data_range": 1.0}
         min_side = int(min(generated.shape[0], generated.shape[1]))
         if min_side < 7:
             # Same constraint as skimage default win_size=7; only for very thin crops.
