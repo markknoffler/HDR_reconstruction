@@ -374,6 +374,7 @@ def default_hrishav_data_paths():
         "hdr_dir": os.path.join(data, "HDR-Real", "HDR_gt"),
         "sam_mask_dir": os.path.join(data, "segmented_masks"),
         "checkpoint_dir": os.path.join(repo, "experiments", "stage1_instruct"),
+        "checkpoint_dir_stage2": os.path.join(repo, "experiments", "stage2_cold"),
     }
 
 
