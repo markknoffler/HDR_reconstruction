@@ -1,4 +1,5 @@
 import csv
+import gc
 import os
 
 import cv2
@@ -361,6 +362,23 @@ def add_subset_args(parser):
         default=0,
         help="Cap validation images (0=no cap). smoke_test sets 4 if unset.",
     )
+
+
+def reset_cuda_memory(device, label: str = "") -> None:
+    """Best-effort CUDA cache clear after OOM or NVML allocator glitches."""
+    if getattr(device, "type", str(device)) != "cuda":
+        return
+    tag = f" ({label})" if label else ""
+    gc.collect()
+    try:
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+        torch.cuda.synchronize()
+    except RuntimeError as exc:
+        print(
+            f"[cuda] reset_cuda_memory{tag} failed: {exc}\n"
+            "       Kill other GPU jobs, start a new shell, or reboot if NVML errors persist."
+        )
 
 
 def sanitize_data_path(path: str) -> str:

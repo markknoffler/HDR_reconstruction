@@ -8,6 +8,10 @@ import argparse
 import os
 import time
 
+# Must be set before the first CUDA allocation (reduces fragmentation after OOM).
+if "PYTORCH_CUDA_ALLOC_CONF" not in os.environ:
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 import torch
 import torch.optim as optim
 from torch.amp import autocast, GradScaler
@@ -23,6 +27,7 @@ from .common_training import (
     apply_smoke_test_args,
     default_hrishav_data_paths,
     maybe_resume,
+    reset_cuda_memory,
     print_epoch_summary,
     save_best_checkpoint,
     save_checkpoint,
@@ -122,6 +127,8 @@ def main():
     args.hdr_dir = sanitize_data_path(args.hdr_dir)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if device.type == "cuda":
+        reset_cuda_memory(device, "startup")
     os.makedirs(args.checkpoint_dir, exist_ok=True)
     validation_root = args.validation_results_dir or os.path.join(args.checkpoint_dir, "validation_results")
     os.makedirs(validation_root, exist_ok=True)
@@ -160,6 +167,8 @@ def main():
             f"Resuming from epoch {start_epoch} (best PSNR={best_psnr:.4f}), "
             f"inference_timesteps={model.inference_timesteps}"
         )
+        if device.type == "cuda":
+            reset_cuda_memory(device, "after resume")
 
     train_loader, val_loader, _, _ = build_dataloaders(
         args.ldr_dir,
@@ -218,8 +227,10 @@ def main():
         pbar = tqdm(train_loader, desc=f"Stage2 Cold {epoch}/{args.epochs}", leave=True)
         vae_only = epoch <= args.vae_warmup_epochs
         if epoch == args.vae_warmup_epochs + 1 and device.type == "cuda":
-            torch.cuda.empty_cache()
+            reset_cuda_memory(device, "pre full cold")
             print("[Stage2-LORCD] VAE warmup done — cleared CUDA cache before full cold training.")
+        elif device.type == "cuda":
+            reset_cuda_memory(device, f"epoch {epoch} start")
         for step, batch in enumerate(pbar, start=1):
             ldr = batch["ldr_image"].to(device)
             hdr = batch["hdr_image"].to(device)
@@ -249,7 +260,7 @@ def main():
             scaler.step(optimizer)
             scaler.update()
             if device.type == "cuda" and not vae_only and step % 50 == 0:
-                torch.cuda.empty_cache()
+                reset_cuda_memory(device)
             running += loss.item()
             postfix = {"loss": f"{running / step:.4f}"}
             if vae_only:
