@@ -90,6 +90,12 @@ def main():
     parser.add_argument("--amp", action="store_true")
     parser.add_argument("--continue_train", action="store_true")
     parser.add_argument(
+        "--resume_from",
+        type=str,
+        default="",
+        help="Checkpoint file to resume from (e.g. epoch_5.pt). Default: checkpoint_dir/latest.pt",
+    )
+    parser.add_argument(
         "--trial_val_samples",
         type=int,
         default=5,
@@ -140,11 +146,12 @@ def main():
     best_psnr, best_ssim = 0.0, 0.0
     best_hdrvdp2, best_hdrvdp3 = 0.0, 0.0
     if args.continue_train:
+        resume_from = sanitize_data_path(args.resume_from) if args.resume_from else ""
         start_epoch, best_psnr, best_ssim, best_hdrvdp2, best_hdrvdp3 = maybe_resume(
-            args.checkpoint_dir, model, optimizer, strict=False
+            args.checkpoint_dir, model, optimizer, resume_from=resume_from, strict=False
         )
         model = model.to(device)
-        resume_path = os.path.join(args.checkpoint_dir, "latest.pt")
+        resume_path = resume_from or os.path.join(args.checkpoint_dir, "latest.pt")
         if os.path.isfile(resume_path):
             ckpt_meta = torch.load(resume_path, map_location="cpu")
             if ckpt_meta.get("inference_timesteps") is not None:

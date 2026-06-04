@@ -239,7 +239,16 @@ def maybe_resume(checkpoint_dir, model, optimizer, resume_from: str = "", strict
             "[resume] Partial load (strict=False): "
             f"missing={len(incompatible.missing_keys)} unexpected={len(incompatible.unexpected_keys)}"
         )
-    optimizer.load_state_dict(ckpt["optimizer"])
+    opt_state = ckpt.get("optimizer")
+    if opt_state is not None:
+        try:
+            optimizer.load_state_dict(opt_state)
+        except ValueError as exc:
+            print(
+                "[resume] Optimizer state not loaded (architecture or param count changed). "
+                "Continuing with a fresh optimizer; model weights were still restored.\n"
+                f"         Detail: {exc}"
+            )
     last_epoch = int(ckpt.get("epoch", 0))
     start_epoch = last_epoch + 1
     print(
