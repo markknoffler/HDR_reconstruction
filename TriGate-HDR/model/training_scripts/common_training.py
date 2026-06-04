@@ -212,7 +212,7 @@ def save_metrics_to_csv(csv_path, epoch, train_loss, val_psnr, val_ssim, val_hdr
         )
 
 
-def maybe_resume(checkpoint_dir, model, optimizer, resume_from: str = ""):
+def maybe_resume(checkpoint_dir, model, optimizer, resume_from: str = "", strict: bool = True):
     """
     Load weights/optimizer and return the next epoch to run.
 
@@ -233,7 +233,12 @@ def maybe_resume(checkpoint_dir, model, optimizer, resume_from: str = ""):
         return 1, 0.0, 0.0, 0.0, 0.0
 
     ckpt = torch.load(latest, map_location="cpu")
-    model.load_state_dict(ckpt["model"])
+    incompatible = model.load_state_dict(ckpt["model"], strict=strict)
+    if not strict and (incompatible.missing_keys or incompatible.unexpected_keys):
+        print(
+            "[resume] Partial load (strict=False): "
+            f"missing={len(incompatible.missing_keys)} unexpected={len(incompatible.unexpected_keys)}"
+        )
     optimizer.load_state_dict(ckpt["optimizer"])
     last_epoch = int(ckpt.get("epoch", 0))
     start_epoch = last_epoch + 1
@@ -374,7 +379,7 @@ def default_hrishav_data_paths():
         "hdr_dir": os.path.join(data, "HDR-Real", "HDR_gt"),
         "sam_mask_dir": os.path.join(data, "segmented_masks"),
         "checkpoint_dir": os.path.join(repo, "experiments", "stage1_instruct"),
-        "checkpoint_dir_stage2": os.path.join(repo, "experiments", "stage2_cold"),
+        "checkpoint_dir_stage2": os.path.join(repo, "experiments", "stage2_cold_lorcd"),
     }
 
 

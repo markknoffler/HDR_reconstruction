@@ -70,7 +70,13 @@ def main():
     parser.add_argument("--batch_size", type=int, default=2)
     parser.add_argument("--max_dim", type=int, default=512)
     parser.add_argument("--num_workers", type=int, default=4)
-    parser.add_argument("--timesteps", type=int, default=100, help="Cold diffusion steps.")
+    parser.add_argument("--timesteps", type=int, default=100, help="Cold diffusion steps (training).")
+    parser.add_argument(
+        "--inference_timesteps",
+        type=int,
+        default=25,
+        help="Cold reverse steps for restore_hdr at validation (lower saves VRAM/time).",
+    )
     parser.add_argument("--base_ch", type=int, default=64, help="Latent UNet base channels.")
     parser.add_argument("--latent_ch", type=int, default=4, help="MiniHDR-VAE latent channels.")
     parser.add_argument("--vae_warmup_epochs", type=int, default=5, help="VAE-only warmup before cold training.")
@@ -124,6 +130,7 @@ def main():
         base_ch=args.base_ch,
         latent_ch=args.latent_ch,
     ).to(device)
+    model.inference_timesteps = int(args.inference_timesteps)
     optimizer = optim.AdamW(model.parameters(), lr=args.lr)
     scaler = GradScaler("cuda", enabled=args.amp and device.type == "cuda")
     radiometric_loss_fn = HybridRadiometricConsistencyLoss()
@@ -134,10 +141,18 @@ def main():
     best_hdrvdp2, best_hdrvdp3 = 0.0, 0.0
     if args.continue_train:
         start_epoch, best_psnr, best_ssim, best_hdrvdp2, best_hdrvdp3 = maybe_resume(
-            args.checkpoint_dir, model, optimizer
+            args.checkpoint_dir, model, optimizer, strict=False
         )
         model = model.to(device)
-        print(f"Resuming from epoch {start_epoch} (best PSNR={best_psnr:.4f})")
+        resume_path = os.path.join(args.checkpoint_dir, "latest.pt")
+        if os.path.isfile(resume_path):
+            ckpt_meta = torch.load(resume_path, map_location="cpu")
+            if ckpt_meta.get("inference_timesteps") is not None:
+                model.inference_timesteps = int(ckpt_meta["inference_timesteps"])
+        print(
+            f"Resuming from epoch {start_epoch} (best PSNR={best_psnr:.4f}), "
+            f"inference_timesteps={model.inference_timesteps}"
+        )
 
     train_loader, val_loader, _, _ = build_dataloaders(
         args.ldr_dir,
@@ -195,6 +210,9 @@ def main():
         running = 0.0
         pbar = tqdm(train_loader, desc=f"Stage2 Cold {epoch}/{args.epochs}", leave=True)
         vae_only = epoch <= args.vae_warmup_epochs
+        if epoch == args.vae_warmup_epochs + 1 and device.type == "cuda":
+            torch.cuda.empty_cache()
+            print("[Stage2-LORCD] VAE warmup done — cleared CUDA cache before full cold training.")
         for step, batch in enumerate(pbar, start=1):
             ldr = batch["ldr_image"].to(device)
             hdr = batch["hdr_image"].to(device)
@@ -223,6 +241,8 @@ def main():
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
+            if device.type == "cuda" and not vae_only and step % 50 == 0:
+                torch.cuda.empty_cache()
             running += loss.item()
             postfix = {"loss": f"{running / step:.4f}"}
             if vae_only:
@@ -314,8 +334,10 @@ def main():
             "best_val_psnr": best_psnr,
             "best_val_ssim": best_ssim,
             "timesteps": args.timesteps,
+            "inference_timesteps": args.inference_timesteps,
             "base_ch": args.base_ch,
             "latent_ch": args.latent_ch,
+            "vae_warmup_epochs": args.vae_warmup_epochs,
             "stage2_type": "cold_efficient_lorcd",
         }
         save_latest_checkpoint(args.checkpoint_dir, payload)

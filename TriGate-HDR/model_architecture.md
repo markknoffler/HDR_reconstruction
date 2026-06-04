@@ -320,7 +320,7 @@ z^E_t = (1 - \alpha_t)\, z^E_0, \qquad z_t = z^{\mathrm{lift}} + z^E_t.
 | \(\mathcal{L}_{\mathrm{exp}}\) | \(\|z^E_0 - \hat z^E_0\|_1\) |
 | \(\mathcal{L}_{\mathrm{cold}}\) | \(\|\mathrm{ColdFwd}(\hat z^E_0,t) - z^E_t\|_1\) |
 | \(\mathcal{L}_{\mathrm{trust}}\) | \(\|\tau \odot \hat z^E_0\|_1\) (zero expansion where LDR is trusted) |
-| \(\mathcal{L}_{\mathrm{ms}}\) | Multi-scale cold consistency at UNet levels 0–2 |
+| \(\mathcal{L}_{\mathrm{ms}}\) | Multi-scale cold consistency at UNet down levels 1–3 |
 | \(\mathcal{L}_{\mathrm{mono}}\) | Monotonicity penalty on `MonoLiftLatent` |
 | \(\mathcal{L}_{\mathrm{rad}}\) | `HybridRadiometricConsistencyLoss` |
 
@@ -328,7 +328,7 @@ z^E_t = (1 - \alpha_t)\, z^E_0, \qquad z_t = z^{\mathrm{lift}} + z^E_t.
 
 ### 5.4 Reverse sampling (`restore_hdr`)
 
-Start \(z^E \leftarrow 0\), \(z^{\mathrm{lift}} \leftarrow \mathrm{MonoLift}(z_{\mathrm{LDR}})\). For \(t = T-1 \ldots 0\):
+Start \(z^E \leftarrow 0\), \(z^{\mathrm{lift}} \leftarrow \mathrm{MonoLift}(z_{\mathrm{LDR}})\). Reverse uses `inference_timesteps` (default 25) subsampled from training \(T\) to save VRAM at validation. For \(t = T-1 \ldots 0\):
 
 1. \(z_t \leftarrow z^{\mathrm{lift}} + z^E\)
 2. \(\hat z^E_0 \leftarrow f_\theta(z_t, z_{\mathrm{LDR}}, t, \tau)\)
@@ -356,12 +356,13 @@ flowchart TB
 | **Anchor** | \(z_{\mathrm{LDR}}\) | None | A1…A4 (uncorrupted) |
 | **Cold** | \(\mathrm{concat}(z_t, z_{\mathrm{LDR}})\) | Sinusoidal + MLP | C1…C4 (RGCF-fused) |
 
-**RGCF block** (`RGCFBlock`): cross-attention Q from cold, K/V from anchor; output fused as  
-\(C \leftarrow C + (1-\tau)\,\mathrm{CrossAttn} + \tau\,\mathrm{Proj}(A)\).
+**RGCF block** (`RGCFBlock`): conv cross-gate from cold+anchor (O(HW) memory; full spatial attention was removed after 12GB OOM at latent 64×64). Fused as  
+\(C \leftarrow C + (1-\tau)\,\mathrm{Gate}(\mathrm{concat}(C,A))\odot \mathrm{Proj}(A) + \tau\,\mathrm{Proj}_2(A)\).
 
 **Skip wiring:**
 - Down path: after each level, RGCF fuses cold + anchor → saved as cold skip; anchor skip saved separately.
 - Lateral: cold downsampled features += 1×1 proj(anchor) before next level.
+- **Mid:** `ResBlock` on cold stream, then **RGCF** with deepest anchor skip \(A_4\).
 - Up path: transpose conv → RGCF with matching anchor skip → concat with cold skip → ResBlock.
 
 **Head:** 4-channel \(\hat z^E_0\) (not full HDR latent).

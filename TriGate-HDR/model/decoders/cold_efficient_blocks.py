@@ -60,35 +60,29 @@ class ResBlock(nn.Module):
 
 class RGCFBlock(nn.Module):
     """
-    Trust-gated cross-scale radiance fusion between anchor (LDR latent) and cold streams.
-    tau ~ 1 (well-exposed): lock to anchor; tau ~ 0 (clipped): allow cross-attention.
+    Trust-gated radiance fusion (conv cross-gate, O(HW) memory).
+    tau ~ 1: lock to anchor; tau ~ 0: inject anchor context into cold stream.
+    Full spatial attention was removed — it OOMs at 64x64 latent on 12GB GPUs.
     """
 
-    def __init__(self, cold_ch: int, anchor_ch: int, heads: int = 4):
+    def __init__(self, cold_ch: int, anchor_ch: int, heads: int = 4):  # noqa: ARG002
         super().__init__()
-        self.heads = heads
-        self.head_dim = max(8, cold_ch // heads)
-        inner = self.heads * self.head_dim
-        self.q_proj = nn.Conv2d(cold_ch, inner, 1)
-        self.kv_proj = nn.Conv2d(anchor_ch, inner * 2, 1)
-        self.out_proj = nn.Conv2d(inner, cold_ch, 1)
+        mid = max(cold_ch, anchor_ch)
+        self.cross_gate = nn.Sequential(
+            nn.Conv2d(cold_ch + anchor_ch, mid, 3, padding=1),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(mid, cold_ch, 1),
+            nn.Sigmoid(),
+        )
+        self.cross_proj = nn.Conv2d(anchor_ch, cold_ch, 1)
         self.anchor_proj = nn.Conv2d(anchor_ch, cold_ch, 1)
 
     def forward(self, cold: torch.Tensor, anchor: torch.Tensor, trust: torch.Tensor) -> torch.Tensor:
-        b, _, h, w = cold.shape
-        q = self.q_proj(cold).view(b, self.heads, self.head_dim, h * w)
-        kv = self.kv_proj(anchor)
-        k, v = kv.chunk(2, dim=1)
-        k = k.view(b, self.heads, self.head_dim, h * w)
-        v = v.view(b, self.heads, self.head_dim, h * w)
-        scale = self.head_dim ** -0.5
-        attn = torch.softmax(torch.einsum("bhdn,bhdm->bhnm", q * scale, k), dim=-1)
-        cross = torch.einsum("bhnm,bhdm->bhdn", attn, v)
-        cross = cross.reshape(b, -1, h, w)
-        cross = self.out_proj(cross)
-        if trust.shape[-2:] != (h, w):
-            trust = F.interpolate(trust, size=(h, w), mode="bilinear", align_corners=False)
+        if trust.shape[-2:] != cold.shape[-2:]:
+            trust = F.interpolate(trust, size=cold.shape[-2:], mode="bilinear", align_corners=False)
         trust = trust.clamp(0, 1)
+        gate = self.cross_gate(torch.cat([cold, anchor], dim=1))
+        cross = self.cross_proj(anchor) * gate
         anchor_p = self.anchor_proj(anchor)
         return cold + (1.0 - trust) * cross + trust * anchor_p
 
@@ -131,6 +125,7 @@ class ColdEfficientLatentUNet(nn.Module):
             in_c = out_c
 
         self.mid = ResBlock(in_c, in_c, time_dim)
+        self.mid_rgcf = RGCFBlock(in_c, in_c)
 
         self.cold_up = nn.ModuleList()
         self.up_projs = nn.ModuleList()
@@ -181,6 +176,7 @@ class ColdEfficientLatentUNet(nn.Module):
                 cold = cold + self.lateral_projs[i](anchor)
 
         cold = self.mid(cold, time_emb)
+        cold = self.mid_rgcf(cold, anchor_skips[-1], trust)
 
         for i, up in enumerate(self.cold_up):
             cold = up[0](cold)
