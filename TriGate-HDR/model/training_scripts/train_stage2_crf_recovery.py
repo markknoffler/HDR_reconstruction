@@ -5,6 +5,7 @@ Validation metrics: FHDR/test.py PSNR-μ and SSIM via common_training.compute_ps
 """
 
 import argparse
+import csv
 import os
 import time
 
@@ -32,16 +33,20 @@ from .common_training import (
     save_best_checkpoint,
     save_checkpoint,
     save_latest_checkpoint,
-    save_metrics_to_csv,
     sanitize_data_path,
 )
 from .dataset_splits import build_dataloaders
-from .val_export import make_stage2_predictor, validate_model_mtraining
+from .val_export import make_stage2_epoch_predictor, validate_model_mtraining
 
 
 def _make_subset_loader(loader, sample_count: int, num_workers: int, seed: int):
     ds = loader.dataset
-    indices = list(getattr(ds, "indices", []))
+    if hasattr(ds, "indices"):
+        indices = list(ds.indices)
+        base_ds = ds.dataset
+    else:
+        indices = list(range(len(ds)))
+        base_ds = ds
     if not indices:
         return None
     if len(indices) <= sample_count:
@@ -51,7 +56,7 @@ def _make_subset_loader(loader, sample_count: int, num_workers: int, seed: int):
         g.manual_seed(int(seed))
         order = torch.randperm(len(indices), generator=g).tolist()
         picked = [indices[i] for i in order[:sample_count]]
-    subset = Subset(ds.dataset, picked)
+    subset = Subset(base_ds, picked)
     return DataLoader(
         subset,
         batch_size=1,
@@ -59,6 +64,63 @@ def _make_subset_loader(loader, sample_count: int, num_workers: int, seed: int):
         num_workers=num_workers,
         pin_memory=True,
     )
+
+
+def _append_stage2_metrics_csv(
+    csv_path,
+    epoch,
+    train_loss,
+    tr_psnr,
+    tr_ssim,
+    tr_h2,
+    tr_h3,
+    val_psnr,
+    val_ssim,
+    val_h2,
+    val_h3,
+    val_ran: bool,
+    vae_only: bool,
+    metric_note: str = "",
+):
+    os.makedirs(os.path.dirname(csv_path) or ".", exist_ok=True)
+    file_exists = os.path.isfile(csv_path)
+    with open(csv_path, "a", newline="") as csvfile:
+        fieldnames = [
+            "epoch",
+            "train_loss",
+            "vae_only",
+            "train_probe_psnr",
+            "train_probe_ssim",
+            "train_probe_hdrvdp2",
+            "train_probe_hdrvdp3",
+            "val_psnr",
+            "val_ssim",
+            "val_hdrvdp2",
+            "val_hdrvdp3",
+            "full_val_ran",
+            "metric_note",
+        ]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(
+            {
+                "epoch": epoch,
+                "train_loss": f"{float(train_loss):.6f}",
+                "vae_only": int(vae_only),
+                "train_probe_psnr": f"{float(tr_psnr):.4f}",
+                "train_probe_ssim": f"{float(tr_ssim):.4f}",
+                "train_probe_hdrvdp2": f"{float(tr_h2):.4f}",
+                "train_probe_hdrvdp3": f"{float(tr_h3):.4f}",
+                "val_psnr": f"{float(val_psnr):.4f}" if val_ran else "",
+                "val_ssim": f"{float(val_ssim):.4f}" if val_ran else "",
+                "val_hdrvdp2": f"{float(val_h2):.4f}" if val_ran else "",
+                "val_hdrvdp3": f"{float(val_h3):.4f}" if val_ran else "",
+                "full_val_ran": int(val_ran),
+                "metric_note": metric_note,
+            }
+        )
+    print(f"  Metrics CSV updated: {csv_path}")
 
 
 def main():
@@ -191,7 +253,7 @@ def main():
     print(f"  Metrics (FHDR/test.py PSNR-μ + SSIM): {csv_path}")
     print(f"  Trial val before epoch 1: {not args.skip_trial_validation and start_epoch == 1}")
 
-    predict_fn = make_stage2_predictor(model)
+    predict_fn = make_stage2_epoch_predictor(model, vae_warmup_epochs=args.vae_warmup_epochs)
 
     if start_epoch == 1 and not args.skip_trial_validation and val_loader is not None:
         trial_loader = _make_subset_loader(
@@ -217,10 +279,27 @@ def main():
             )
             print(f"  Trial PSNR/SSIM/H2/H3: {t_psnr:.4f} / {t_ssim:.4f} / {t_h2:.4f} / {t_h3:.4f}")
             print(f"  Exports: {os.path.join(validation_root, 'epoch_0')}")
+            _append_stage2_metrics_csv(
+                csv_path,
+                epoch=0,
+                train_loss=0.0,
+                tr_psnr=0.0,
+                tr_ssim=0.0,
+                tr_h2=0.0,
+                tr_h3=0.0,
+                val_psnr=t_psnr,
+                val_ssim=t_ssim,
+                val_h2=t_h2,
+                val_h3=t_h3,
+                val_ran=True,
+                vae_only=True,
+                metric_note="trial_val_before_epoch_1",
+            )
             print("=" * 60 + "\n")
             model.train()
 
     for epoch in range(start_epoch, args.epochs + 1):
+        predict_fn.set_epoch(epoch)
         epoch_start = time.time()
         model.train()
         running = 0.0
@@ -302,7 +381,9 @@ def main():
         val_psnr, val_ssim, val_h2, val_h3 = 0.0, 0.0, 0.0, 0.0
         val_ran = False
         do_full = val_loader is not None and (
-            epoch % max(1, args.full_val_every) == 0 or epoch == args.epochs
+            epoch == 1
+            or epoch % max(1, args.full_val_every) == 0
+            or epoch == args.epochs
         )
         if do_full:
             print("Full validation...")
@@ -320,14 +401,24 @@ def main():
             val_ran = True
             print(f"  Val PSNR/SSIM: {val_psnr:.4f} / {val_ssim:.4f}")
 
-        save_metrics_to_csv(
+        metric_note = "full_val" if val_ran else f"train_probe_{args.train_eval_samples}"
+        if vae_only:
+            metric_note += ";vae_warmup_eval=MonoLift_decode"
+        _append_stage2_metrics_csv(
             csv_path,
             epoch,
             train_loss,
-            val_psnr if val_ran else tr_psnr,
-            val_ssim if val_ran else tr_ssim,
-            val_h2 if val_ran else tr_h2,
-            val_h3 if val_ran else tr_h3,
+            tr_psnr,
+            tr_ssim,
+            tr_h2,
+            tr_h3,
+            val_psnr,
+            val_ssim,
+            val_h2,
+            val_h3,
+            val_ran=val_ran,
+            vae_only=vae_only,
+            metric_note=metric_note,
         )
         reported_psnr = val_psnr if val_ran else tr_psnr
         reported_ssim = val_ssim if val_ran else tr_ssim
@@ -346,6 +437,10 @@ def main():
         )
         if not val_ran:
             print(f"  (Epoch summary PSNR/SSIM are from {metric_src}, not full validation.)")
+        if vae_only:
+            print(
+                f"  (Epoch {epoch}: VAE warmup — validation uses MonoLift+VAE decode, not full cold restore_hdr.)"
+            )
 
         payload = {
             "epoch": epoch,

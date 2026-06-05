@@ -205,6 +205,18 @@ def make_stage1_instruct_predictor(model, num_inference_steps: int = 25):
     return predict
 
 
+def make_stage2_vae_baseline_predictor(model):
+    """During VAE warmup, eval decode(MonoLift(z_ldr)) — matches what is actually trained."""
+
+    def predict(batch, input_ldr, ground_truth, device):
+        ldr_hdr = model.ldr_to_hdr_space(input_ldr)
+        z_ldr, _, _ = model.vae.encode(ldr_hdr, sample=False)
+        z_lift = model.vae.mln(z_ldr)
+        return model.vae.decode(z_lift).clamp(-1.0, 1.0)
+
+    return predict
+
+
 def make_stage2_predictor(model):
     def predict(batch, input_ldr, ground_truth, device):
         gate = batch.get("gate")
@@ -213,6 +225,29 @@ def make_stage2_predictor(model):
         return model.restore_hdr(input_ldr, gate=gate)
 
     return predict
+
+
+class Stage2EpochPredictor:
+    """Pick VAE-baseline vs full restore_hdr based on current training epoch."""
+
+    def __init__(self, model, vae_warmup_epochs: int = 0):
+        self.model = model
+        self.vae_warmup_epochs = int(vae_warmup_epochs)
+        self.epoch = 1
+        self._vae_predict = make_stage2_vae_baseline_predictor(model)
+        self._full_predict = make_stage2_predictor(model)
+
+    def set_epoch(self, epoch: int) -> None:
+        self.epoch = int(epoch)
+
+    def __call__(self, batch, input_ldr, ground_truth, device):
+        if self.epoch <= self.vae_warmup_epochs:
+            return self._vae_predict(batch, input_ldr, ground_truth, device)
+        return self._full_predict(batch, input_ldr, ground_truth, device)
+
+
+def make_stage2_epoch_predictor(model, vae_warmup_epochs: int = 0) -> Stage2EpochPredictor:
+    return Stage2EpochPredictor(model, vae_warmup_epochs=vae_warmup_epochs)
 
 
 def make_stage3_predictor(stage1, stage2, generator):
