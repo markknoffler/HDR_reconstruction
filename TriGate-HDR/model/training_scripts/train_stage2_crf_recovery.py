@@ -87,7 +87,7 @@ def main():
     parser.add_argument("--vae_warmup_epochs", type=int, default=5, help="VAE-only warmup before cold training.")
     parser.add_argument("--cold_loss_weight", type=float, default=1.0)
     parser.add_argument("--exp_loss_weight", type=float, default=1.0)
-    parser.add_argument("--trust_loss_weight", type=float, default=0.5)
+    parser.add_argument("--trust_loss_weight", type=float, default=0.02)
     parser.add_argument("--ms_cold_weight", type=float, default=0.25)
     parser.add_argument("--vae_loss_weight", type=float, default=0.1)
     parser.add_argument("--mono_loss_weight", type=float, default=0.01)
@@ -329,16 +329,23 @@ def main():
             val_h2 if val_ran else tr_h2,
             val_h3 if val_ran else tr_h3,
         )
+        reported_psnr = val_psnr if val_ran else tr_psnr
+        reported_ssim = val_ssim if val_ran else tr_ssim
+        reported_h2 = val_h2 if val_ran else tr_h2
+        reported_h3 = val_h3 if val_ran else tr_h3
+        metric_src = "full val" if val_ran else f"train-probe ({args.train_eval_samples} imgs)"
         print_epoch_summary(
             epoch,
             args.epochs,
             train_loss,
-            val_psnr if val_ran else tr_psnr,
-            val_ssim if val_ran else tr_ssim,
-            val_h2 if val_ran else tr_h2,
-            val_h3 if val_ran else tr_h3,
+            reported_psnr,
+            reported_ssim,
+            reported_h2,
+            reported_h3,
             epoch_time,
         )
+        if not val_ran:
+            print(f"  (Epoch summary PSNR/SSIM are from {metric_src}, not full validation.)")
 
         payload = {
             "epoch": epoch,

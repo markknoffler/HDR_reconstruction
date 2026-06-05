@@ -207,7 +207,10 @@ def make_stage1_instruct_predictor(model, num_inference_steps: int = 25):
 
 def make_stage2_predictor(model):
     def predict(batch, input_ldr, ground_truth, device):
-        return model.restore_hdr(input_ldr)
+        gate = batch.get("gate")
+        if gate is not None:
+            gate = gate.to(device)
+        return model.restore_hdr(input_ldr, gate=gate)
 
     return predict
 
@@ -222,7 +225,7 @@ def make_stage3_predictor(stage1, stage2, generator):
             segmap = segmap.to(device)
         t = torch.zeros((input_ldr.shape[0],), device=device, dtype=torch.long)
         gen_clip, _, _, _ = stage1(input_ldr, t, segmap=segmap)
-        stage2_hdr = stage2.restore_hdr(input_ldr)
+        stage2_hdr = stage2.restore_hdr(input_ldr, gate=gate)
         composed, seam_mask = _build_composited_input(stage2_hdr, gen_clip, gate)
         return generator(composed, gen_clip, seam_mask)
 

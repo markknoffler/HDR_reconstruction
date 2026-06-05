@@ -163,7 +163,7 @@ def main():
                 t = torch.randint(0, 100, (ldr.shape[0],), device=device).long()
                 with autocast("cuda", enabled=args.amp and device.type == "cuda"):
                     gen_clip, _, class_probs, _ = frozen_stage1(ldr, t, segmap=batch.get("segmap", ldr).to(device))
-                    stage2_hdr = frozen_stage2.restore_hdr(ldr)
+                    stage2_hdr = frozen_stage2.restore_hdr(ldr, gate=gate)
                 composed_x, seam_mask = build_composited_input(stage2_hdr, gen_clip, gate)
 
             opt_d.zero_grad(set_to_none=True)

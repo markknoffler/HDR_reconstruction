@@ -86,7 +86,7 @@ def main():
                 sam_class_masks = sam_class_masks.to(device)
             t = torch.randint(0, 100, (ldr.shape[0],), device=device).long()
             gen_clip, _, class_probs, _ = stage1(ldr, t, segmap=batch.get("segmap", ldr).to(device))
-            stage2_hdr = stage2.restore_hdr(ldr)
+            stage2_hdr = stage2.restore_hdr(ldr, gate=gate)
             composed_x, seam_mask = build_composited_input(stage2_hdr, gen_clip, gate)
             fake = stage3.generator(composed_x, gen_clip, seam_mask)
             recon_loss, _ = stage3_loss(fake, hdr_gt, composed_x, gate, class_masks=sam_class_masks, class_probs=class_probs)

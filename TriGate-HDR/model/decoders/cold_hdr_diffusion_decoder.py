@@ -192,7 +192,9 @@ class ColdHDRDiffusion(nn.Module):
                 cold_at_prev = self.cold_forward_exp(z_exp_hat_0, t_prev)
                 z_exp = z_exp - cold_at_t + cold_at_prev
             else:
-                z_exp = z_exp_hat_0
+                # On the final step, t=0, so cold_forward_exp(z_exp_hat_0, 0) = z_exp_hat_0.
+                # The correct transition is: z_exp = z_exp - cold_at_t + z_exp_hat_0
+                z_exp = z_exp - cold_at_t + z_exp_hat_0
 
         z_out = z_lift + z_exp
         return self.vae.decode(z_out).clamp(-1.0, 1.0)
