@@ -187,6 +187,19 @@ class TrainableTriGateInstructPix2PixStage1(nn.Module):
         input_ids = text_inputs.input_ids.to(device)
         return self.text_encoder(input_ids)[0]
 
+    def _encode_uncond_prompt(self, batch_size: int, device: torch.device) -> torch.Tensor:
+        """Embed an empty string for Classifier-Free Guidance."""
+        prompts = [""] * batch_size
+        text_inputs = self.tokenizer(
+            prompts,
+            padding="max_length",
+            max_length=self.tokenizer.model_max_length,
+            truncation=True,
+            return_tensors="pt",
+        )
+        input_ids = text_inputs.input_ids.to(device)
+        return self.text_encoder(input_ids)[0]
+
     def _vae_encode(self, images_m11: torch.Tensor, sample: bool = True) -> torch.Tensor:
         images_m11 = images_m11.to(dtype=torch.float32)
         dist = self.vae.encode(images_m11).latent_dist
@@ -287,9 +300,12 @@ class TrainableTriGateInstructPix2PixStage1(nn.Module):
         num_inference_steps: int = 25,
         max_side: int = 768,
         generator: Optional[torch.Generator] = None,
+        guidance_scale: float = 7.5,
+        image_guidance_scale: float = 1.5,
     ) -> torch.Tensor:
         """
-        Reverse diffusion with fine-tuned UNet + TriGate latent conditioning (same path as training).
+        Reverse diffusion with fine-tuned UNet + TriGate latent conditioning.
+        Implements 3-way Classifier-Free Guidance for InstructPix2Pix.
         """
         orig_h, orig_w = ldr.shape[2], ldr.shape[3]
         ldr_work = resize_ldr_for_sd(ldr, max_side=max_side)
@@ -298,7 +314,14 @@ class TrainableTriGateInstructPix2PixStage1(nn.Module):
 
         ldr_vae = self._ldr_to_vae(ldr_work)
         image_latents = self._vae_encode(ldr_vae, sample=False)
+        
+        # 1. Encode prompts for 3-way guidance
         prompt_embeds = self._encode_prompt(b, device)
+        uncond_prompt_embeds = self._encode_uncond_prompt(b, device)
+        # Combined embeds for efficiency: [cond, uncond_text, uncond_all]
+        # In this simplified 3-way, we often just do 2 passes if image_guidance is low, 
+        # but here we follow the formal logic.
+        do_classifier_free_guidance = guidance_scale > 1.0 and image_guidance_scale >= 1.0
 
         self.scheduler.set_timesteps(num_inference_steps, device=device)
         latents = torch.randn(
@@ -314,14 +337,39 @@ class TrainableTriGateInstructPix2PixStage1(nn.Module):
         for t in self.scheduler.timesteps:
             t_batch = t.expand(b).long()
             img_cond = self.cond_injector(ldr_work, image_latents, t_batch, segmap=segmap)
-            concat = torch.cat([latents, img_cond], dim=1)
-            pred_noise = self.unet(
-                concat,
-                t_batch,
-                encoder_hidden_states=prompt_embeds,
-                return_dict=False,
-            )[0]
-            latents = self.scheduler.step(pred_noise, t, latents, return_dict=False)[0]
+            
+            if do_classifier_free_guidance:
+                # 3-way concat: [latents, latents, latents] with [cond_img, cond_img, zero_img]
+                # but we use image_latents as the anchor.
+                latent_model_input = torch.cat([latents] * 3)
+                image_cond_input = torch.cat([img_cond, img_cond, torch.zeros_like(img_cond)])
+                concat = torch.cat([latent_model_input, image_cond_input], dim=1)
+                
+                # Text: [cond, uncond, uncond]
+                text_input = torch.cat([prompt_embeds, uncond_prompt_embeds, uncond_prompt_embeds])
+                
+                noise_pred = self.unet(
+                    concat,
+                    torch.cat([t_batch] * 3),
+                    encoder_hidden_states=text_input,
+                    return_dict=False,
+                )[0]
+                
+                noise_pred_text, noise_pred_image, noise_pred_uncond = noise_pred.chunk(3)
+                
+                noise_pred = noise_pred_uncond + \
+                             guidance_scale * (noise_pred_text - noise_pred_image) + \
+                             image_guidance_scale * (noise_pred_image - noise_pred_uncond)
+            else:
+                concat = torch.cat([latents, img_cond], dim=1)
+                noise_pred = self.unet(
+                    concat,
+                    t_batch,
+                    encoder_hidden_states=prompt_embeds,
+                    return_dict=False,
+                )[0]
+
+            latents = self.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
 
         pred_rgb = self._vae_decode_latents(latents)
         pred_hdr = pred_rgb.clamp(-1.0, 1.0)

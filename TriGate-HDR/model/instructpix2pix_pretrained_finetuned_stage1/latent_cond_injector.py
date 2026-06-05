@@ -51,7 +51,7 @@ class LatentCondInjector(nn.Module):
             in_mask=mask_ch,
             t_dim=t_dim,
         )
-        self.res_scale = nn.Parameter(torch.tensor(0.1))
+        self.res_scale = nn.Parameter(torch.tensor(0.0))
 
     def forward(
         self,

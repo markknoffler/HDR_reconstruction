@@ -54,9 +54,9 @@ class TriGateHDRDataset(Dataset):
                 ldr = cv2.resize(ldr, (new_w, new_h), interpolation=cv2.INTER_AREA)
                 hdr = cv2.resize(hdr, (new_w, new_h), interpolation=cv2.INTER_AREA)
         hdr = np.clip(hdr, 0.0, None)
-        hdr_max = float(hdr.max())
-        if hdr_max > 0:
-            hdr = hdr / hdr_max
+        # Fix A: Use a global normalization factor to preserve scene-to-scene radiance ratios.
+        GLOBAL_HDR_SCALE = 100.0
+        hdr = np.clip(hdr / GLOBAL_HDR_SCALE, 0.0, 1.0)
 
         ldr_t = torch.from_numpy(ldr).permute(2, 0, 1).float()
         hdr_t = torch.from_numpy(2.0 * hdr - 1.0).permute(2, 0, 1).float()
