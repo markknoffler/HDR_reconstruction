@@ -40,8 +40,26 @@ class ColdHDRDiffusion(nn.Module):
         self.timesteps = int(timesteps)
         self.inference_timesteps = int(timesteps)
         self.latent_ch = latent_ch
+        self.vae_frozen = False
         alphas = torch.linspace(0.0, 1.0, self.timesteps)
         self.register_buffer("alphas", alphas)
+
+    def set_vae_trainable(self, trainable: bool) -> None:
+        """Freeze VAE/MLN after warmup so cold UNet cannot hide behind a drifting encoder."""
+        self.vae_frozen = not trainable
+        for p in self.vae.parameters():
+            p.requires_grad = trainable
+
+    def sample_timesteps(self, batch_size: int, device: torch.device) -> torch.Tensor:
+        """Bias toward high t (z_t ~ z_lift) — matches inference start state."""
+        u = torch.rand(batch_size, device=device)
+        t = (u.pow(0.5) * float(self.timesteps - 1)).long()
+        return t.clamp(0, self.timesteps - 1)
+
+    def _timestep_weight(self, t: torch.Tensor) -> torch.Tensor:
+        """Higher weight at high corruption (large alpha) for inference-critical steps."""
+        a = self.alphas[t].view(-1, 1, 1, 1)
+        return 0.25 + 0.75 * a
 
     @staticmethod
     def ldr_to_hdr_space(ldr: torch.Tensor) -> torch.Tensor:
@@ -86,8 +104,9 @@ class ColdHDRDiffusion(nn.Module):
         b = hdr.shape[0]
         device = hdr.device
 
-        z_hdr, mu_h, lv_h = self.vae.encode(hdr, sample=True)
-        z_ldr, mu_l, lv_l = self.vae.encode(ldr_hdr, sample=True)
+        encode_sample = not self.vae_frozen
+        z_hdr, mu_h, lv_h = self.vae.encode(hdr, sample=encode_sample)
+        z_ldr, mu_l, lv_l = self.vae.encode(ldr_hdr, sample=encode_sample)
         recon_hdr = self.vae.decode(z_hdr)
         recon_ldr = self.vae.decode(z_ldr)
         vae_loss_h, vae_parts_h = self.vae.vae_loss(hdr, recon_hdr, mu_h, lv_h)
@@ -106,6 +125,8 @@ class ColdHDRDiffusion(nn.Module):
                 "trust_loss": torch.tensor(0.0, device=device),
                 "ms_cold_loss": torch.tensor(0.0, device=device),
                 "mono_loss": torch.tensor(0.0, device=device),
+                "anchor_exp": torch.tensor(0.0, device=device),
+                "anchor_hdr": torch.tensor(0.0, device=device),
                 "t": torch.tensor(0.0, device=device),
             }
 
@@ -118,19 +139,26 @@ class ColdHDRDiffusion(nn.Module):
             if trust.dim() == 3:
                 trust = trust.unsqueeze(1)
 
-        t = torch.randint(0, self.timesteps, (b,), device=device).long()
+        t = self.sample_timesteps(b, device)
         z_exp_t = self.cold_forward_exp(z_exp_0, t)
         z_t = z_lift + z_exp_t
 
         z_exp_pred, cold_feats = self.model(z_t, z_ldr, t, trust, return_features=True)
 
         z_hdr_pred = z_lift + z_exp_pred
-        hdr_pred = self.vae.decode(z_hdr_pred)
+        hdr_pred = torch.nan_to_num(self.vae.decode(z_hdr_pred), nan=0.0, posinf=1.0, neginf=-1.0).clamp(
+            -1.0, 1.0
+        )
 
-        hdr_loss = F.l1_loss(hdr, hdr_pred)
-        exp_loss = F.l1_loss(z_exp_0, z_exp_pred)
+        t_w = self._timestep_weight(t)
+        hdr_loss = (F.l1_loss(hdr, hdr_pred, reduction="none").mean(dim=(1, 2, 3)) * t_w.squeeze()).mean()
+        exp_loss = (
+            F.l1_loss(z_exp_0, z_exp_pred, reduction="none").mean(dim=(1, 2, 3)) * t_w.squeeze()
+        ).mean()
         z_exp_t_pred = self.cold_forward_exp(z_exp_pred, t)
-        cold_loss = F.l1_loss(z_exp_t, z_exp_t_pred)
+        cold_loss = (
+            F.l1_loss(z_exp_t, z_exp_t_pred, reduction="none").mean(dim=(1, 2, 3)) * t_w.squeeze()
+        ).mean()
 
         trust_ds = F.interpolate(trust, size=z_exp_pred.shape[-2:], mode="bilinear", align_corners=False)
         trust_loss = (trust_ds * z_exp_pred.abs()).mean()
@@ -144,7 +172,19 @@ class ColdHDRDiffusion(nn.Module):
 
         mono_loss = self.vae.mln.monotonicity_penalty(z_ldr)
 
-        loss = hdr_loss + cold_loss + exp_loss + trust_loss + 0.25 * ms_cold_loss + 0.01 * mono_loss + 0.1 * vae_loss
+        # Matches restore_hdr start: z_exp=0, t=T-1, z_t=z_lift.
+        t_max = self.timesteps - 1
+        anchor_mask = (t == t_max).float()
+        anchor_denom = anchor_mask.sum().clamp_min(1.0)
+        anchor_exp = (
+            F.l1_loss(z_exp_0, z_exp_pred, reduction="none").mean(dim=(1, 2, 3)) * anchor_mask
+        ).sum() / anchor_denom
+        anchor_hdr = (
+            F.l1_loss(hdr, hdr_pred, reduction="none").mean(dim=(1, 2, 3)) * anchor_mask
+        ).sum() / anchor_denom
+
+        vae_term = vae_loss if not self.vae_frozen else torch.tensor(0.0, device=device)
+        loss = hdr_loss + cold_loss + exp_loss + trust_loss + 0.25 * ms_cold_loss + 0.01 * mono_loss + 0.1 * vae_term
 
         return hdr_pred, {
             "loss": loss,
@@ -154,6 +194,8 @@ class ColdHDRDiffusion(nn.Module):
             "trust_loss": trust_loss,
             "ms_cold_loss": ms_cold_loss,
             "mono_loss": mono_loss,
+            "anchor_exp": anchor_exp,
+            "anchor_hdr": anchor_hdr,
             "vae_loss": vae_loss,
             "recon_loss": vae_parts_h["recon_loss"],
             "kl_loss": vae_parts_h["kl_loss"],
@@ -178,23 +220,25 @@ class ColdHDRDiffusion(nn.Module):
             if trust.dim() == 3:
                 trust = trust.unsqueeze(1)
 
-        z_exp = torch.zeros_like(z_ldr)
         n_steps = max(1, int(self.inference_timesteps))
+        if n_steps == 1:
+            t_batch = torch.full((b,), self.timesteps - 1, device=device, dtype=torch.long)
+            z_exp_hat_0 = self.model(z_lift, z_ldr, t_batch, trust)
+            z_out = z_lift + z_exp_hat_0
+            return self.vae.decode(z_out).clamp(-1.0, 1.0)
+
+        z_exp = torch.zeros_like(z_ldr)
         step_ids = torch.linspace(self.timesteps - 1, 0, n_steps, device=device).long().tolist()
         for idx, t_val in enumerate(step_ids):
             t_batch = torch.full((b,), int(t_val), device=device, dtype=torch.long)
             z_t = z_lift + z_exp
             z_exp_hat_0 = self.model(z_t, z_ldr, t_batch, trust)
-            cold_at_t = self.cold_forward_exp(z_exp_hat_0, t_batch)
             if idx < len(step_ids) - 1:
                 t_prev_val = int(step_ids[idx + 1])
                 t_prev = torch.full((b,), t_prev_val, device=device, dtype=torch.long)
-                cold_at_prev = self.cold_forward_exp(z_exp_hat_0, t_prev)
-                z_exp = z_exp - cold_at_t + cold_at_prev
+                z_exp = self.cold_forward_exp(z_exp_hat_0, t_prev)
             else:
-                # On the final step, t=0, so cold_forward_exp(z_exp_hat_0, 0) = z_exp_hat_0.
-                # The correct transition is: z_exp = z_exp - cold_at_t + z_exp_hat_0
-                z_exp = z_exp - cold_at_t + z_exp_hat_0
+                z_exp = z_exp_hat_0
 
         z_out = z_lift + z_exp
         return self.vae.decode(z_out).clamp(-1.0, 1.0)

@@ -30,8 +30,8 @@ class HybridRadiometricConsistencyLoss(nn.Module):
         return torch.pow(x + self.eps, 1.0 / self.gamma).clamp(0.0, 1.0)
 
     def forward(self, pred_hdr, gt_hdr, ldr, gate):
-        pred_hdr_lin = pred_hdr.clamp(min=0.0)
-        gt_hdr_lin = gt_hdr.clamp(min=0.0)
+        pred_hdr_lin = pred_hdr.clamp(min=self.eps, max=1.0)
+        gt_hdr_lin = gt_hdr.clamp(min=self.eps, max=1.0)
         ldr_in = ldr.clamp(0.0, 1.0)
         non_clip = gate
         clip = 1.0 - gate

@@ -48,6 +48,35 @@ def mse_loss(pred, target):
     return torch.mean((pred - target) ** 2)
 
 
+class ModelEMA:
+    """Exponential moving average of model weights for stabler validation checkpoints."""
+
+    def __init__(self, model, decay: float = 0.999):
+        self.decay = float(decay)
+        self.shadow = {k: v.detach().clone() for k, v in model.state_dict().items() if v.dtype.is_floating_point}
+
+    @torch.no_grad()
+    def update(self, model) -> None:
+        for k, v in model.state_dict().items():
+            if k not in self.shadow or not v.dtype.is_floating_point:
+                continue
+            self.shadow[k].mul_(self.decay).add_(v.detach(), alpha=1.0 - self.decay)
+
+    def apply(self, model) -> dict:
+        backup = {k: v.detach().clone() for k, v in model.state_dict().items() if k in self.shadow}
+        state = model.state_dict()
+        for k, v in self.shadow.items():
+            state[k] = v
+        model.load_state_dict(state, strict=False)
+        return backup
+
+    def restore(self, model, backup: dict) -> None:
+        state = model.state_dict()
+        for k, v in backup.items():
+            state[k] = v
+        model.load_state_dict(state, strict=False)
+
+
 def _finite_metric(x, default=0.0):
     x = float(x)
     return x if np.isfinite(x) else default
