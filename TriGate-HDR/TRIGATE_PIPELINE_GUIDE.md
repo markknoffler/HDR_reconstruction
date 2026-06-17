@@ -1,6 +1,8 @@
 # TriGate-HDR: Full Pipeline Implementation & Design Guide
 
-This document tracks architectural decisions, training status, and the **Stage-2 Cold HDR debugging log**.
+**See also:** [`TRIGATE_IMPLEMENTATION_HISTORY.md`](TRIGATE_IMPLEMENTATION_HISTORY.md) — full design philosophy, paper targets, architecture changelog, and training commands.
+
+This document tracks operational training status and the Stage-2 debug log.
 
 ---
 
@@ -191,6 +193,15 @@ python -u -m model.training_scripts.train_stage2_crf_recovery \
 
 ### Autonomous loop log
 
+- **2026-06-10 20:36**: Loop done. Best: /home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/experiments/stage2_cold_lorcd_v3/best_epoch_30.pt. v4/v4b collapsed from heavy losses; v6 uses conservative recipe.
+- **2026-06-10 20:36**: **stage2_cold_lorcd_v7** finished: full-val epoch=25 PSNR=2.5733 SSIM=0.0152
+- **2026-06-10 18:36**: **stage2_cold_lorcd_v7** epoch 10 full-val: PSNR=3.0407 SSIM=0.0355
+- **2026-06-10 17:56**: **stage2_cold_lorcd_v7** epoch 5 full-val: PSNR=5.4416 SSIM=0.1996
+- **2026-06-10 17:10**: Started **stage2_cold_lorcd_v7** (warm_start=/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/experiments/stage2_cold_lorcd_v3/best_epoch_30.pt, args=--cold_lr 2e-5 --mu_psnr_loss_weight 1.0 --radiometric_weight 0 --early_stop_patience 5)
+- **2026-06-10 17:10**: **stage2_cold_lorcd_v6** finished: full-val epoch=25 PSNR=2.6214 SSIM=0.0124
+- **2026-06-10 13:15**: **stage2_cold_lorcd_v6** epoch 10 full-val: PSNR=3.3616 SSIM=0.0384
+- **2026-06-10 11:55**: **stage2_cold_lorcd_v6** epoch 5 full-val: PSNR=3.7387 SSIM=0.0640
+- **2026-06-10 (v8 fix)**: **stage2_cold_lorcd_v8** — continue from v3 `epoch_30.pt` (epoch 31+). Fixes: no double optimizer reset, no EMA/cosine, `restore_hdr_train` inference loss, ReduceLROnPlateau, early-stop restores best.pt
 - **2026-06-10 10:25**: Started **stage2_cold_lorcd_v6** (warm_start=/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/experiments/stage2_cold_lorcd_v3/best_epoch_30.pt, args=--cold_lr 5e-5 --mu_psnr_loss_weight 0.5 --hdr_loss_weight 1.0 --exp_loss_weight 2.0 --anchor_exp_weight 0.5 --anchor_hdr_weight 0.5 --radiometric_weight 0.02 --early_stop_patience 5 --inference_timesteps 50)
 - **2026-06-10 10:25**: Autonomous training loop started (target PSNR≥17, SSIM≥0.71, GPU 0, deeplearning env)
 - **2026-06-10 06:00**: **v6 started** — conservative recipe after v4/v4b collapse (heavy mu_psnr/hdr losses destroyed warm-start weights). cold_lr=5e-5, mu_psnr=0.5, hdr=1.0, early_stop=5, warm_start=v3/best_epoch_30.pt

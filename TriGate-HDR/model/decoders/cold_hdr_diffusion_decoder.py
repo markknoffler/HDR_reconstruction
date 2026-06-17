@@ -13,6 +13,7 @@ import torch.nn.functional as F
 
 from .cold_efficient_blocks import ColdEfficientLatentUNet
 from .mini_hdr_vae import MiniHDRVAE
+from .pixel_hdr_refiner import PixelHDRRefiner, sobel_gradient_loss
 
 
 class ColdHDRDiffusion(nn.Module):
@@ -30,10 +31,16 @@ class ColdHDRDiffusion(nn.Module):
         timesteps: int = 100,
         base_ch: int = 64,
         latent_ch: int = 4,
+        vae_base_ch: int = 32,
         vae_kl_weight: float = 1e-4,
+        use_pixel_refiner: bool = False,
+        refiner_base_ch: int = 48,
+        refiner_blocks: int = 6,
     ):
         super().__init__()
-        self.vae = vae if vae is not None else MiniHDRVAE(latent_ch=latent_ch, kl_weight=vae_kl_weight)
+        self.vae = vae if vae is not None else MiniHDRVAE(
+            latent_ch=latent_ch, base_ch=vae_base_ch, kl_weight=vae_kl_weight
+        )
         self.model = model if model is not None else ColdEfficientLatentUNet(
             latent_ch=latent_ch, base_ch=base_ch
         )
@@ -41,6 +48,12 @@ class ColdHDRDiffusion(nn.Module):
         self.inference_timesteps = int(timesteps)
         self.latent_ch = latent_ch
         self.vae_frozen = False
+        self.use_pixel_refiner = bool(use_pixel_refiner)
+        self.pixel_refiner = (
+            PixelHDRRefiner(base_ch=refiner_base_ch, num_blocks=refiner_blocks)
+            if self.use_pixel_refiner
+            else None
+        )
         alphas = torch.linspace(0.0, 1.0, self.timesteps)
         self.register_buffer("alphas", alphas)
 
@@ -78,6 +91,11 @@ class ColdHDRDiffusion(nn.Module):
         scale = min(1.0, float(2 ** (level - (num_levels - 1))))
         a_level = torch.clamp(a * scale, 0.0, 1.0)
         return (1.0 - a_level) * z_exp
+
+    def _apply_pixel_refiner(self, ldr_hdr: torch.Tensor, hdr_coarse: torch.Tensor) -> torch.Tensor:
+        if self.pixel_refiner is None:
+            return hdr_coarse
+        return self.pixel_refiner(ldr_hdr, hdr_coarse)
 
     def _encode_pair(self, hdr: torch.Tensor, ldr_hdr: torch.Tensor):
         z_hdr, mu_h, lv_h = self.vae.encode(hdr, sample=True)
@@ -127,6 +145,7 @@ class ColdHDRDiffusion(nn.Module):
                 "mono_loss": torch.tensor(0.0, device=device),
                 "anchor_exp": torch.tensor(0.0, device=device),
                 "anchor_hdr": torch.tensor(0.0, device=device),
+                "hf_loss": torch.tensor(0.0, device=device),
                 "t": torch.tensor(0.0, device=device),
             }
 
@@ -149,9 +168,11 @@ class ColdHDRDiffusion(nn.Module):
         hdr_pred = torch.nan_to_num(self.vae.decode(z_hdr_pred), nan=0.0, posinf=1.0, neginf=-1.0).clamp(
             -1.0, 1.0
         )
+        hdr_out = self._apply_pixel_refiner(ldr_hdr, hdr_pred)
 
         t_w = self._timestep_weight(t)
-        hdr_loss = (F.l1_loss(hdr, hdr_pred, reduction="none").mean(dim=(1, 2, 3)) * t_w.squeeze()).mean()
+        hdr_loss = (F.l1_loss(hdr, hdr_out, reduction="none").mean(dim=(1, 2, 3)) * t_w.squeeze()).mean()
+        hf_loss = sobel_gradient_loss(hdr_out, hdr)
         exp_loss = (
             F.l1_loss(z_exp_0, z_exp_pred, reduction="none").mean(dim=(1, 2, 3)) * t_w.squeeze()
         ).mean()
@@ -180,13 +201,13 @@ class ColdHDRDiffusion(nn.Module):
             F.l1_loss(z_exp_0, z_exp_pred, reduction="none").mean(dim=(1, 2, 3)) * anchor_mask
         ).sum() / anchor_denom
         anchor_hdr = (
-            F.l1_loss(hdr, hdr_pred, reduction="none").mean(dim=(1, 2, 3)) * anchor_mask
+            F.l1_loss(hdr, hdr_out, reduction="none").mean(dim=(1, 2, 3)) * anchor_mask
         ).sum() / anchor_denom
 
         vae_term = vae_loss if not self.vae_frozen else torch.tensor(0.0, device=device)
         loss = hdr_loss + cold_loss + exp_loss + trust_loss + 0.25 * ms_cold_loss + 0.01 * mono_loss + 0.1 * vae_term
 
-        return hdr_pred, {
+        return hdr_out, {
             "loss": loss,
             "hdr_loss": hdr_loss,
             "cold_loss": cold_loss,
@@ -196,16 +217,20 @@ class ColdHDRDiffusion(nn.Module):
             "mono_loss": mono_loss,
             "anchor_exp": anchor_exp,
             "anchor_hdr": anchor_hdr,
+            "hf_loss": hf_loss,
             "vae_loss": vae_loss,
             "recon_loss": vae_parts_h["recon_loss"],
             "kl_loss": vae_parts_h["kl_loss"],
             "t": t.float().mean(),
         }
 
-    @torch.no_grad()
-    def restore_hdr(self, ldr: torch.Tensor, gate: torch.Tensor | None = None) -> torch.Tensor:
-        """Reverse cold chain on expansion latent; decode to HDR."""
-        self.eval()
+    def _restore_hdr_impl(
+        self,
+        ldr: torch.Tensor,
+        gate: torch.Tensor | None,
+        n_steps: int | None = None,
+    ) -> torch.Tensor:
+        """Reverse cold chain (differentiable when called under grad enabled)."""
         ldr_hdr = self.ldr_to_hdr_space(ldr)
         b = ldr_hdr.shape[0]
         device = ldr_hdr.device
@@ -220,12 +245,13 @@ class ColdHDRDiffusion(nn.Module):
             if trust.dim() == 3:
                 trust = trust.unsqueeze(1)
 
-        n_steps = max(1, int(self.inference_timesteps))
+        n_steps = max(1, int(n_steps if n_steps is not None else self.inference_timesteps))
         if n_steps == 1:
             t_batch = torch.full((b,), self.timesteps - 1, device=device, dtype=torch.long)
             z_exp_hat_0 = self.model(z_lift, z_ldr, t_batch, trust)
             z_out = z_lift + z_exp_hat_0
-            return self.vae.decode(z_out).clamp(-1.0, 1.0)
+            hdr_coarse = self.vae.decode(z_out).clamp(-1.0, 1.0)
+            return self._apply_pixel_refiner(ldr_hdr, hdr_coarse)
 
         z_exp = torch.zeros_like(z_ldr)
         step_ids = torch.linspace(self.timesteps - 1, 0, n_steps, device=device).long().tolist()
@@ -241,7 +267,27 @@ class ColdHDRDiffusion(nn.Module):
                 z_exp = z_exp_hat_0
 
         z_out = z_lift + z_exp
-        return self.vae.decode(z_out).clamp(-1.0, 1.0)
+        hdr_coarse = self.vae.decode(z_out).clamp(-1.0, 1.0)
+        return self._apply_pixel_refiner(ldr_hdr, hdr_coarse)
+
+    @torch.no_grad()
+    def restore_hdr(self, ldr: torch.Tensor, gate: torch.Tensor | None = None) -> torch.Tensor:
+        """Reverse cold chain on expansion latent; decode to HDR (eval/inference)."""
+        was_training = self.training
+        self.eval()
+        try:
+            return self._restore_hdr_impl(ldr, gate)
+        finally:
+            self.train(was_training)
+
+    def restore_hdr_train(
+        self,
+        ldr: torch.Tensor,
+        gate: torch.Tensor | None = None,
+        n_steps: int | None = None,
+    ) -> torch.Tensor:
+        """Differentiable restore for training-time alignment with validation."""
+        return self._restore_hdr_impl(ldr, gate, n_steps=n_steps)
 
 
 # Backward-compatible aliases (legacy imports / docs)

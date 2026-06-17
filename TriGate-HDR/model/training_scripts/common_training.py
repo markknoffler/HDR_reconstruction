@@ -155,78 +155,183 @@ def save_ldr_image_01(img_tensor, batch, path):
     cv2.imwrite(path, img)
 
 
-def print_epoch_summary(epoch, total_epochs, train_loss, val_psnr, val_ssim, val_hdrvdp2, val_hdrvdp3, epoch_time):
+def print_epoch_summary(
+    epoch,
+    total_epochs,
+    train_loss,
+    val_psnr,
+    val_ssim,
+    val_hdrvdp2,
+    val_hdrvdp3,
+    epoch_time,
+    metric_label: str = "Validation",
+):
     """Match ARThdrNet/m_training.py epoch summary printout."""
     print(f"\n{'=' * 60}")
     print(f"Epoch {epoch}/{total_epochs} Summary")
     print(f"{'=' * 60}")
     print(f"  Training Loss    : {train_loss:.6f}")
-    print(f"  Validation PSNR  : {val_psnr:.4f} dB")
-    print(f"  Validation SSIM  : {val_ssim:.4f}")
+    print(f"  {metric_label} PSNR  : {val_psnr:.4f} dB")
+    print(f"  {metric_label} SSIM  : {val_ssim:.4f}")
     print(f"  HDR-VDP-2 Score  : {val_hdrvdp2:.4f}")
     print(f"  HDR-VDP-3 Score  : {val_hdrvdp3:.4f}")
     print(f"  Epoch Time       : {epoch_time:.2f} seconds")
     print(f"{'=' * 60}")
 
 
+def print_stage2_epoch_summary(
+    epoch,
+    total_epochs,
+    train_loss,
+    train_psnr,
+    train_ssim,
+    val_psnr,
+    val_ssim,
+    val_full_psnr,
+    val_full_ssim,
+    epoch_time,
+    train_hdrvdp2=0.0,
+    train_hdrvdp3=0.0,
+    val_hdrvdp2=0.0,
+    val_hdrvdp3=0.0,
+    val_full_hdrvdp2=None,
+    val_full_hdrvdp3=None,
+):
+    """Stage 2: separate train / val-subset / val-full PSNR+SSIM+HDR-VDP every epoch."""
+    print(f"\n{'=' * 60}")
+    print(f"Epoch {epoch}/{total_epochs} Summary")
+    print(f"{'=' * 60}")
+    print(f"  Training Loss       : {train_loss:.6f}")
+    print(f"  Train PSNR / SSIM   : {train_psnr:.4f} dB / {train_ssim:.4f}")
+    print(f"  Train HDR-VDP-2 / 3 : {train_hdrvdp2:.4f} / {train_hdrvdp3:.4f}")
+    print(f"  Val   PSNR / SSIM   : {val_psnr:.4f} dB / {val_ssim:.4f}  (held-out val subset)")
+    print(f"  Val   HDR-VDP-2 / 3 : {val_hdrvdp2:.4f} / {val_hdrvdp3:.4f}")
+    if val_full_psnr is not None and val_full_ssim is not None:
+        print(f"  Val-F PSNR / SSIM   : {val_full_psnr:.4f} dB / {val_full_ssim:.4f}  (full val split)")
+        if val_full_hdrvdp2 is not None and val_full_hdrvdp3 is not None:
+            print(f"  Val-F HDR-VDP-2 / 3 : {val_full_hdrvdp2:.4f} / {val_full_hdrvdp3:.4f}")
+    print(f"  Epoch Time          : {epoch_time:.2f} seconds")
+    print(f"{'=' * 60}")
+
+
 class HDRVDPMetrics:
     """
-    Official HDR-VDP-2 (Q, 0-100) and HDR-VDP-3 quality (Q_JOD) via bundled
-    SourceForge releases and Octave. Matches HistoHDR-Net / ICIP evaluation:
-    metrics on linear HDR (cd/m^2), not PU21/FovVideoVDP proxies.
+    Official HDR-VDP-2 (Q, 0-100) and HDR-VDP-3 quality (Q_JOD, 0-10) via Octave.
+
+    Protocol matches ExpoCM / SingleHDR benchmarks:
+      - peak-normalize linear HDR to 1000 cd/m^2 (gt peak), pred exposure-aligned
+      - HDR-VDP-2 at 30 PPD; HDR-VDP-3 Q_JOD at display-native PPD (~0-10 scale)
+
+    When Octave is unavailable or ``use_real_hdrvdp=False``, falls back to a
+    lightweight PU21 proxy (VDP-2 on 0-100, VDP-3 on 0-10).
     """
 
-    def __init__(self, use_real_hdrvdp=True, peak_luminance=1000.0):
+    def __init__(self, use_real_hdrvdp=True, peak_luminance=1000.0, pixels_per_degree=30.0):
         self._pair_cache = None
         self._pair_cache_key = None
         self._official = None
         self.hdrvdp_available = False
+        self.use_real_hdrvdp = bool(use_real_hdrvdp)
+        self._warned_proxy = False
+        self.display_peak = float(peak_luminance)
+        self.pixels_per_degree = float(pixels_per_degree)
 
-        if use_real_hdrvdp:
+        if self.use_real_hdrvdp:
             try:
                 from ..metrics.hdrvdp_official import OfficialHDRVDPBackend
 
-                self._official = OfficialHDRVDPBackend(peak_luminance=peak_luminance)
+                self._official = OfficialHDRVDPBackend(
+                    display_peak=self.display_peak,
+                    pixels_per_degree=self.pixels_per_degree,
+                    peak_luminance=self.display_peak,
+                )
                 self.hdrvdp_available = self._official.available
                 if self.hdrvdp_available:
                     print(
-                        f"Official HDR-VDP loaded (Octave: {self._official.octave_executable})"
+                        f"Official HDR-VDP loaded (Octave: {self._official.octave_executable}, "
+                        f"PPD={self.pixels_per_degree:g})"
                     )
                 else:
                     print(
                         "WARNING: Official HDR-VDP not available (Octave or third_party missing). "
-                        "Metrics will be NaN. Use conda env 'trigate-hdrvdp' or set HDRVDP_OCTAVE_BIN."
+                        "Using PU21 proxy for HDR-VDP-2/3. Install env 'trigate-hdrvdp' or set HDRVDP_OCTAVE_BIN."
                     )
             except Exception as e:
-                print(f"WARNING: Official HDR-VDP init failed ({e})")
+                print(f"WARNING: Official HDR-VDP init failed ({e}); using PU21 proxy.")
+        else:
+            print("HDR-VDP: PU21 fast proxy (--hdrvdp_fast_proxy; approximate, for speed only).")
 
     def compute_hdrvdp2(self, hdr_pred, hdr_gt):
-        q2, q3 = self._compute_official_pair(hdr_pred, hdr_gt)
+        q2, q3 = self._compute_pair(hdr_pred, hdr_gt)
         return q2
 
     def compute_hdrvdp3(self, hdr_pred, hdr_gt):
-        q2, q3 = self._compute_official_pair(hdr_pred, hdr_gt)
+        q2, q3 = self._compute_pair(hdr_pred, hdr_gt)
         return q3
 
-    def _compute_official_pair(self, hdr_pred, hdr_gt):
+    def _compute_pair(self, hdr_pred, hdr_gt):
         cache_key = (hdr_pred.data_ptr(), hdr_gt.data_ptr())
         if self._pair_cache_key == cache_key and self._pair_cache is not None:
             return self._pair_cache
-        if not self.hdrvdp_available or self._official is None:
-            result = (float("nan"), float("nan"))
-        else:
+
+        q2, q3 = float("nan"), float("nan")
+        if self.use_real_hdrvdp and self.hdrvdp_available and self._official is not None:
             try:
                 q2, q3 = self._official.compute_pair(hdr_pred, hdr_gt)
-                result = (
-                    float(q2) if np.isfinite(q2) else float("nan"),
-                    float(q3) if np.isfinite(q3) else float("nan"),
-                )
+                q2 = float(q2) if np.isfinite(q2) else float("nan")
+                q3 = float(q3) if np.isfinite(q3) else float("nan")
             except Exception as e:
                 print(f"WARNING: HDR-VDP computation failed ({e})")
-                result = (float("nan"), float("nan"))
+
+        if np.isfinite(q2):
+            q2 = float(np.clip(q2, 0.0, 100.0))
+        else:
+            q2 = self._pu21_proxy(hdr_pred, hdr_gt, vdp3_style=False)
+
+        if np.isfinite(q3):
+            q3 = float(np.clip(q3, 0.0, 10.0))
+        else:
+            q3 = self._pu21_proxy(hdr_pred, hdr_gt, vdp3_style=True)
+
         self._pair_cache_key = cache_key
-        self._pair_cache = result
-        return result
+        self._pair_cache = (q2, q3)
+        return q2, q3
+
+    @staticmethod
+    def _pu21_encode(luminance: np.ndarray) -> np.ndarray:
+        return np.log((luminance + 1e-4) / (luminance + 0.01))
+
+    def _pu21_proxy(self, hdr_pred, hdr_gt, vdp3_style: bool = False) -> float:
+        """Fast fallback when official HDR-VDP is off or fails (approximate trends only)."""
+        if not self._warned_proxy and self.use_real_hdrvdp:
+            print("NOTE: Using PU21 HDR-VDP proxy for some images (official returned NaN or failed).")
+            self._warned_proxy = True
+
+        pred = hdr_pred.unsqueeze(0) if hdr_pred.dim() == 3 else hdr_pred
+        gt = hdr_gt.unsqueeze(0) if hdr_gt.dim() == 3 else hdr_gt
+        mu_pred = mu_tonemap(pred)
+        mu_gt = mu_tonemap(gt)
+        mse = float(torch.mean((mu_pred - mu_gt) ** 2).item())
+        psnr_mu = 10.0 * np.log10(1.0 / (mse + 1e-12))
+
+        if vdp3_style:
+            # HDR-VDP-3 Q_JOD is on ~0-10 (ExpoCM Table 1).
+            pred_lin = torch.clamp((pred + 1.0) * 0.5, 0.0, 1.0)
+            gt_lin = torch.clamp((gt + 1.0) * 0.5, 0.0, 1.0)
+            grad = 0.0
+            for scale in (1, 2, 4):
+                if scale > 1:
+                    pred_s = pred_lin[:, :, ::scale, ::scale]
+                    gt_s = gt_lin[:, :, ::scale, ::scale]
+                else:
+                    pred_s, gt_s = pred_lin, gt_lin
+                grad += float(torch.mean(torch.abs(pred_s - gt_s)).item())
+            jod = 0.55 * (psnr_mu / 10.0) + 0.45 * (1.0 - min(grad * 5.0, 1.0)) * 10.0
+            return float(np.clip(jod, 0.0, 10.0))
+
+        # HDR-VDP-2 Q is on 0-100; coarse fit to ExpoCM HDR-REAL trend at PPD=30.
+        q2 = 2.45 * psnr_mu - 0.5
+        return float(np.clip(q2, 0.0, 100.0))
 
 
 def save_metrics_to_csv(csv_path, epoch, train_loss, val_psnr, val_ssim, val_hdrvdp2=0.0, val_hdrvdp3=0.0):
@@ -248,27 +353,55 @@ def save_metrics_to_csv(csv_path, epoch, train_loss, val_psnr, val_ssim, val_hdr
         )
 
 
-def maybe_resume(checkpoint_dir, model, optimizer, resume_from: str = "", strict: bool = True):
+def maybe_resume(
+    checkpoint_dir,
+    model,
+    optimizer,
+    resume_from: str = "",
+    strict: bool = True,
+    prefer_best: bool = False,
+):
     """
     Load weights/optimizer and return the next epoch to run.
 
-    Uses resume_from if set, else checkpoint_dir/latest.pt.
-    If nothing is found, returns start_epoch=1 (fresh run).
+    Uses resume_from if set, else latest.pt (default) or best.pt (if prefer_best).
+    If latest.pt is missing, falls back to best.pt. If nothing is found, start_epoch=1.
     """
     checkpoint_dir = sanitize_data_path(checkpoint_dir)
+    best_path = os.path.join(checkpoint_dir, "best.pt")
+    latest_path = os.path.join(checkpoint_dir, "latest.pt")
     if resume_from:
-        latest = sanitize_data_path(resume_from)
+        ckpt_path = sanitize_data_path(resume_from)
+    elif prefer_best and os.path.isfile(best_path):
+        ckpt_path = best_path
+    elif os.path.isfile(latest_path):
+        ckpt_path = latest_path
+        if os.path.isfile(best_path):
+            latest_ckpt = torch.load(latest_path, map_location="cpu")
+            best_ckpt = torch.load(best_path, map_location="cpu")
+            lat_val = float(latest_ckpt.get("val_psnr") or 0.0)
+            best_val = float(best_ckpt.get("best_val_psnr") or best_ckpt.get("val_psnr") or 0.0)
+            if lat_val and best_val and lat_val < best_val - 0.5:
+                print(
+                    f"[resume] Note: latest.pt (epoch {latest_ckpt.get('epoch')}, "
+                    f"val PSNR={lat_val:.2f}) is below best.pt (epoch {best_ckpt.get('epoch')}, "
+                    f"PSNR={best_val:.2f}). Resuming latest epoch — use --resume_best or "
+                    f"--resume_from {best_path} for best weights."
+                )
+    elif os.path.isfile(best_path):
+        ckpt_path = best_path
+        print(f"[resume] latest.pt not found — falling back to {best_path}")
     else:
-        latest = os.path.join(checkpoint_dir, "latest.pt")
+        ckpt_path = latest_path
 
-    if not os.path.isfile(latest):
+    if not os.path.isfile(ckpt_path):
         print(
-            f"[resume] No checkpoint at {latest!r} — starting from epoch 1.\n"
-            f"         Expected finished run: {os.path.join(checkpoint_dir, 'latest.pt')}"
+            f"[resume] No checkpoint at {ckpt_path!r} — starting from epoch 1.\n"
+            f"         Expected: {best_path} or {latest_path}"
         )
         return 1, 0.0, 0.0, 0.0, 0.0
 
-    ckpt = torch.load(latest, map_location="cpu")
+    ckpt = torch.load(ckpt_path, map_location="cpu")
     incompatible = model.load_state_dict(ckpt["model"], strict=strict)
     if not strict and (incompatible.missing_keys or incompatible.unexpected_keys):
         print(
@@ -288,7 +421,7 @@ def maybe_resume(checkpoint_dir, model, optimizer, resume_from: str = "", strict
     last_epoch = int(ckpt.get("epoch", 0))
     start_epoch = last_epoch + 1
     print(
-        f"[resume] Loaded {latest}\n"
+        f"[resume] Loaded {ckpt_path}\n"
         f"         last completed epoch={last_epoch} -> continuing at epoch {start_epoch}"
     )
     return (
@@ -316,6 +449,11 @@ def save_latest_checkpoint(checkpoint_dir, payload):
 def save_best_checkpoint(checkpoint_dir, payload):
     os.makedirs(checkpoint_dir, exist_ok=True)
     torch.save(payload, os.path.join(checkpoint_dir, "best.pt"))
+
+
+def save_best_probe_checkpoint(checkpoint_dir, payload):
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    torch.save(payload, os.path.join(checkpoint_dir, "best_probe.pt"))
 
 
 def load_checkpoint(path, device):

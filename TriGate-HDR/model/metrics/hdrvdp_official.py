@@ -1,8 +1,10 @@
 """
 Official HDR-VDP-2 and HDR-VDP-3 metrics via bundled SourceForge releases + Octave.
 
-Paper (HistoHDR-Net / ICIP): HDR-VDP-2 on linear HDR images; Q is reported on ~0-100.
-HDR-VDP-3 quality uses task='quality' and Q_JOD (Just-Objectionable-Differences).
+Benchmark protocol (ExpoCM CVPR 2026 / SingleHDR evaluation):
+  - Linear RGB in cd/m^2 with per-image peak mapped to display_peak (default 1000).
+  - HDR-VDP-2: hdrvdp() Q correlate on 0-100 scale, 30 PPD, 0.5 m viewing.
+  - HDR-VDP-3: hdrvdp3('quality') Q_JOD on ~0-10 scale, display-native PPD (~11 for 512px).
 """
 
 from __future__ import annotations
@@ -24,10 +26,12 @@ _V2_ROOT = os.path.join(_THIRD_PARTY, "hdrvdp-2.2.2")
 _V3_ROOT = os.path.join(_THIRD_PARTY, "hdrvdp-3.0.7")
 _OCTAVE_SCRIPT = os.path.join(_THIRD_PARTY, "octave", "compute_hdrvdp_pair.m")
 
-# Default peak luminance (cd/m^2) when tensors are max-normalized relative HDR in [0, 1].
-_DEFAULT_PEAK_LUMINANCE = 1000.0
-_DEFAULT_DISPLAY_INCHES = 24.0
+# Match data_loader.py GLOBAL_HDR_SCALE and ExpoCM peak-luminance mapping.
+GLOBAL_HDR_SCALE = 100.0
+_DEFAULT_DISPLAY_PEAK = 1000.0
+_DEFAULT_PIXELS_PER_DEGREE = 30.0
 _DEFAULT_VIEWING_DISTANCE_M = 0.5
+_DEFAULT_DISPLAY_INCHES = 24.0
 
 
 def _octave_env(octave_executable: str) -> dict:
@@ -60,36 +64,56 @@ def _find_octave_executable() -> Optional[str]:
     return None
 
 
+def tensor_pair_to_linear_rgb_cd_m2(
+    hdr_pred: torch.Tensor,
+    hdr_gt: torch.Tensor,
+    display_peak: float = _DEFAULT_DISPLAY_PEAK,
+    *,
+    align_pred_exposure: bool = True,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Convert pred/gt tensors (C,H,W) in [-1, 1] to linear RGB cd/m^2 (H,W,3).
+
+    Benchmark convention:
+      1. Align pred exposure to gt peak (removes global gain bias; shape errors remain).
+      2. Map gt peak to ``display_peak`` cd/m^2 (default 1000); pred uses the same scale.
+    """
+    pred = ((hdr_pred.detach().float().cpu() + 1.0) * 0.5).clamp(min=0.0)
+    gt = ((hdr_gt.detach().float().cpu() + 1.0) * 0.5).clamp(min=0.0)
+    pred = pred.permute(1, 2, 0).numpy()
+    gt = gt.permute(1, 2, 0).numpy()
+
+    gt_peak = max(float(gt.max()), 1e-8)
+    if align_pred_exposure:
+        pred_peak = max(float(pred.max()), 1e-8)
+        pred = pred * (gt_peak / pred_peak)
+
+    scale = float(display_peak) / gt_peak
+    pred_cd = np.clip(pred * scale, 1e-6, None)
+    gt_cd = np.clip(gt * scale, 1e-6, None)
+    if pred_cd.ndim == 2:
+        pred_cd = np.stack([pred_cd, pred_cd, pred_cd], axis=-1)
+        gt_cd = np.stack([gt_cd, gt_cd, gt_cd], axis=-1)
+    return pred_cd.astype(np.float64), gt_cd.astype(np.float64)
+
+
 def tensor_to_linear_rgb_cd_m2(
     hdr_tensor: torch.Tensor,
-    peak_luminance: float = _DEFAULT_PEAK_LUMINANCE,
+    display_peak: float = _DEFAULT_DISPLAY_PEAK,
     reference_tensor: Optional[torch.Tensor] = None,
+    *,
+    use_peak_normalization: bool = True,
 ) -> np.ndarray:
-    """
-    Convert model HDR (C,H,W) in [-1, 1] to linear RGB in cd/m^2 (H,W,3).
-
-    Dataloader max-normalizes HDR per image; we map back to [0, 1] then scale by
-    peak_luminance so pred and ref share the same photometric units (paper: linear domain).
-    """
-    t = hdr_tensor.detach().float().cpu()
-    rgb = (t + 1.0) * 0.5
-    rgb = rgb.clamp(min=0.0)
-    rgb = rgb.permute(1, 2, 0).numpy()
-
-    scale = float(peak_luminance)
-    if reference_tensor is not None:
-        ref = reference_tensor.detach().float().cpu()
-        ref_rgb = (ref + 1.0) * 0.5
-        ref_max = float(ref_rgb.max().item())
-        if ref_max > 1e-8:
-            scale = ref_max * float(peak_luminance)
-
-    rgb = np.clip(rgb * scale, 1e-6, None)
-    if rgb.ndim == 2:
-        rgb = np.stack([rgb, rgb, rgb], axis=-1)
-    elif rgb.shape[-1] == 1:
-        rgb = np.repeat(rgb, 3, axis=-1)
-    return rgb.astype(np.float64)
+    """Single-image helper; prefer ``tensor_pair_to_linear_rgb_cd_m2`` for metric pairs."""
+    if reference_tensor is None:
+        reference_tensor = hdr_tensor
+    test, _ = tensor_pair_to_linear_rgb_cd_m2(
+        hdr_tensor,
+        reference_tensor,
+        display_peak,
+        align_pred_exposure=use_peak_normalization,
+    )
+    return test
 
 
 class OfficialHDRVDPBackend:
@@ -97,12 +121,19 @@ class OfficialHDRVDPBackend:
 
     def __init__(
         self,
-        peak_luminance: float = _DEFAULT_PEAK_LUMINANCE,
+        display_peak: float = _DEFAULT_DISPLAY_PEAK,
+        pixels_per_degree: float = _DEFAULT_PIXELS_PER_DEGREE,
         display_inches: float = _DEFAULT_DISPLAY_INCHES,
         viewing_distance_m: float = _DEFAULT_VIEWING_DISTANCE_M,
         octave_executable: Optional[str] = None,
+        *,
+        peak_luminance: Optional[float] = None,
     ):
-        self.peak_luminance = peak_luminance
+        # Back-compat alias used by older call sites.
+        if peak_luminance is not None:
+            display_peak = float(peak_luminance)
+        self.display_peak = float(display_peak)
+        self.pixels_per_degree = float(pixels_per_degree)
         self.display_inches = display_inches
         self.viewing_distance_m = viewing_distance_m
         self.octave_executable = octave_executable or _find_octave_executable()
@@ -125,8 +156,9 @@ class OfficialHDRVDPBackend:
                 "'trigate-hdrvdp' (conda-forge) or set HDRVDP_OCTAVE_BIN."
             )
 
-        test = tensor_to_linear_rgb_cd_m2(hdr_pred, self.peak_luminance, hdr_gt)
-        ref = tensor_to_linear_rgb_cd_m2(hdr_gt, self.peak_luminance, hdr_gt)
+        test, ref = tensor_pair_to_linear_rgb_cd_m2(
+            hdr_pred, hdr_gt, self.display_peak, align_pred_exposure=True
+        )
 
         with tempfile.TemporaryDirectory(prefix="hdrvdp_") as tmp:
             mat_path = os.path.join(tmp, "pair.mat")
@@ -146,7 +178,8 @@ class OfficialHDRVDPBackend:
                 (
                     f"compute_hdrvdp_pair('{mat_path}', '{out_path}', "
                     f"'{_V2_ROOT}', '{_V3_ROOT}', "
-                    f"{self.display_inches}, {self.viewing_distance_m}, {self.peak_luminance});"
+                    f"{self.display_inches}, {self.viewing_distance_m}, "
+                    f"{self.display_peak}, {self.pixels_per_degree});"
                 ),
             ]
             proc = subprocess.run(
@@ -171,7 +204,6 @@ class OfficialHDRVDPBackend:
                 q3 = float(payload.get("hdrvdp3", float("nan")))
                 return q2, q3
 
-            # Fallback: parse stdout HDRVDP2=/HDRVDP3= lines
             q2, q3 = float("nan"), float("nan")
             for line in (proc.stdout or "").splitlines():
                 m2 = re.match(r"HDRVDP2=([-\d.eE+]+)", line.strip())
