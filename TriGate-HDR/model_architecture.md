@@ -6,6 +6,38 @@ This document is the **authoritative architecture reference** for the TriGate-HD
 
 ---
 
+## Executive summary — GPURE (Gate-Partitioned Unified Radiance Energy)
+
+TriGate-HDR v2 augments the three-path pipeline with **GPURE**: a **single partitioned variational energy** that jointly optimizes:
+
+| Path | Role | Symbol |
+|------|------|--------|
+| **Path-G** | Masked generative diffusion (Stage 1) in clipped regions | \(\hat x_G\) |
+| **Path-C** | Expansion-only cold diffusion (Stage 2) in trusted regions | \(\hat x_C\) |
+| **Path-S** | Seam refiner (Stage 3, optional in Phase C) | \(\hat x_S\) |
+
+**Unified energy:**
+
+\[
+\mathcal{L}_{\mathrm{GPURE}} =
+\mathcal{L}_{\mathrm{rad}}(\hat x, x_{\mathrm{gt}})
++ \lambda_c \mathcal{L}_{\mathrm{cold}}
++ \lambda_g \mathcal{L}_{\mathrm{gen}}
++ \lambda_b \mathcal{L}_{\mathrm{bracket}}
++ \lambda_s \mathcal{L}_{\mathrm{seam}}
+\]
+
+**Key mathematical augmentations (preserve cold-diffusion foundation):**
+
+1. **LR-CFP** — Log-Radiance Cold Forward Process: optically calibrated encoding before latent expansion decomposition.
+2. **RSO** — Radiometric Synapse Operators: domain-specific skip fusion replacing generic conv gates.
+3. **ECC** — Exposure-Bracket Consistency on seam bands coupling Path-G and Path-C.
+4. **Differentiable composer** — `TriGateComposer` inside the model graph (not script glue).
+
+**Code:** `model/unified/`, trainer `model/training_scripts/train_unified_gpure.py`.
+
+---
+
 ## Table of contents
 
 1. [Problem statement and design philosophy](#1-problem-statement-and-design-philosophy)
@@ -20,6 +52,13 @@ This document is the **authoritative architecture reference** for the TriGate-HD
 10. [Gradient and freezing policy](#10-gradient-and-freezing-policy)
 11. [Legacy and alternate paths](#11-legacy-and-alternate-paths)
 12. [Repository map](#12-repository-map)
+13. [GPURE unified framework](#13-gpure-unified-framework)
+14. [LR-CFP theorem sketch](#14-lr-cfp-theorem-sketch)
+15. [RSO skip-level map](#15-rso-skip-level-map)
+16. [Joint training algorithm](#16-joint-training-algorithm)
+17. [Novelty matrix vs SOTA](#17-novelty-matrix-vs-sota)
+18. [GPURE implementation map](#18-gpure-implementation-map)
+19. [20GB VRAM training guide](#19-20gb-vram-training-guide)
 
 ---
 
@@ -665,6 +704,225 @@ TriGate-HDR/
 | **Seam-localized GAN** | **3** | `m_seam * residual` generator |
 | Dual discriminator (global + seam) | 3 | `SeamingDiscriminator` |
 | FHDR-comparable metrics | All | `compute_psnr_ssim` / `fhdr_compare_ssim` |
+| **GPURE unified energy** | **All** | `model/unified/gpure_energy.py` |
+| **LR-CFP optical cold forward** | **2** | `model/unified/optical_cold_forward.py` |
+| **RSO radiometric synapses** | **2, 3** | `model/unified/radiometric_synapse.py` |
+| **Differentiable composer** | **3 / joint** | `model/unified/trigate_composer.py` |
+
+---
+
+## 13. GPURE unified framework
+
+### 13.1 Motivation
+
+The legacy pipeline trained Stages 1→2→3 as **separate subprocesses** (`train_full_pipeline.py`) with composition in `val_export.py`. Reviewer feedback: this is **orchestration**, not a single optimization problem. GPURE fixes this by:
+
+1. Wrapping all paths in `TriGateGPURESystem` (`model/unified/trigate_gpure_system.py`).
+2. Moving composition into `TriGateComposer` (differentiable, gradient flows in Phase **joint**).
+3. Defining one energy `compute_gpure_energy()` used by `train_unified_gpure.py`.
+
+### 13.2 Partition and composition
+
+Given TriGate trust mask \(m_{\mathrm{trust}}\) (1 = well-exposed):
+
+\[
+m_{\mathrm{clip}} = 1 - m_{\mathrm{trust}}
+\]
+
+\[
+\hat x_{\mathrm{comp}} = (1 - m_{\mathrm{clip}}) \odot \hat x_C + m_{\mathrm{clip}} \odot \hat x_G
+\]
+
+Seam band \(m_{\mathrm{seam}}\) from morphological dilation/erosion of \(m_{\mathrm{clip}}\) (see `build_seam_band`).
+
+Final output: \(\hat x = \hat x_S\) if Stage 3 active, else \(\hat x_{\mathrm{comp}}\).
+
+### 13.3 Energy terms
+
+| Term | Formula | Code |
+|------|---------|------|
+| \(\mathcal{L}_{\mathrm{rad}}\) | \(\|\hat x - x_{\mathrm{gt}}\|_1\) | `radiance_loss` |
+| \(\mathcal{L}_{\mathrm{cold}}\) | Stage 2 cold + exp + trust losses | `stage2_parts["loss"]` |
+| \(\mathcal{L}_{\mathrm{gen}}\) | Masked L1 on clips: \(m_{\mathrm{clip}} \odot \|\hat x_G - x_{\mathrm{gt}}\|\) | `masked_gen_loss` |
+| \(\mathcal{L}_{\mathrm{bracket}}\) | ECC on seam: \(\|\mu(\hat x_G)-\mu(\hat x_C)\|_1 + \|\nabla\hat x_G - \nabla\hat x_C\|_1\) | `bracket_consistency_loss` |
+| \(\mathcal{L}_{\mathrm{seam}}\) | Sobel magnitude inside \(m_{\mathrm{seam}}\) | `seam_smoothness_loss` |
+
+Weights: `GPUREEnergyConfig` (`lambda_rad`, `lambda_cold`, `lambda_gen`, `lambda_bracket`, `lambda_seam`).
+
+---
+
+## 14. LR-CFP theorem sketch
+
+### 14.1 Log-radiance encoding
+
+\[
+\ell(x) = \log\big(1 + k \odot \max(\mathrm{radiance}(x), 0)\big), \quad
+\hat\ell = \ell / s
+\]
+
+where \(k\) is per-channel learnable (via `OpticalColdForward.k`), \(s\) is `log_scale`.
+
+### 14.2 Expansion decomposition (unchanged structure, new domain)
+
+\[
+z^{\mathrm{lift}} = \mathcal{M}(\mathcal{E}(\hat\ell_{\mathrm{LDR}})), \quad
+z^E_0 = \mathcal{E}(\hat\ell_{\mathrm{HDR}}) - z^{\mathrm{lift}}
+\]
+
+Cold forward on expansion only:
+
+\[
+z^E_t = (1 - \alpha_t) z^E_0, \quad z_t = z^{\mathrm{lift}} + z^E_t
+\]
+
+### 14.3 Theorem sketch (identifiability)
+
+**Assumptions:** (A1) \(\mathcal{M}\) is monotone in latent space (MonoLift penalty enforces this). (A2) \(\mathcal{E}\) is locally invertible on the support of well-exposed pixels. (A3) Trust gate \(m_{\mathrm{trust}} \approx 1\) on non-saturated regions.
+
+**Claim:** Under (A1–A3), the expansion field \(z^E_0\) is **uniquely determined** by \((\hat\ell_{\mathrm{LDR}}, \hat\ell_{\mathrm{HDR}})\) on trusted pixels. Cold corruption \(\mathcal{F}_{\mathrm{LR}}\) preserves **spatial support** (deterministic, no Gaussian blur)—strictly stronger than generic Bansal cold diffusion on arbitrary features.
+
+**Relation to Bansal et al.:** Bansal proves any deterministic corruption defines a valid reverse process. LR-CFP **restricts** corruption to (i) log-radiance domain, (ii) expansion-only orthogonal component, (iii) trust-partitioned inference—yielding a **new forward process class** for HDR.
+
+**Enable flag:** `--use_lr_cfp` on Stage 2 / unified trainer.
+
+---
+
+## 15. RSO skip-level map
+
+### 15.1 RSO cell equation
+
+\[
+\mathrm{RSO}(h_c, h_a, \tau, t) =
+h_c + \sigma(\tau) \odot \Big[
+  e^{\beta(\log(1+|h_c|) - \log(1+|h_a|))}
+  \odot \Phi_k(h_a)
+  \odot \Psi_t(h_c, h_a)
+\Big]
+\]
+
+- \(\Phi_k\): learnable μ-law camera response (`CameraResponseFn`)
+- \(\Psi_t\): time-modulated depthwise Jacobian (`SeamJacobian`)
+- \(\sigma(\tau)\): trust-modulated injection gate
+
+### 15.2 Where RSO is applied
+
+| Location | Module | When `use_rso=True` |
+|----------|--------|---------------------|
+| Stage 2 down ×4 | `RGCFBlock` in `cold_down` loop | `rgcf_blocks[i]` |
+| Stage 2 mid | `mid_rgcf` | deepest anchor skip |
+| Stage 2 up ×3 | `up_projs[i]` | after transpose conv |
+| Stage 3 stem | `RSOStem` in `SeamingGenerator` | `--use_rso` on GAN |
+
+Legacy RGCF (conv cross-gate) remains when `use_rso=False` (default, backward compatible).
+
+**Enable flag:** `--use_rso` on Stage 2 / unified trainer / `SeamingGANSystem(use_rso_stem=True)`.
+
+---
+
+## 16. Joint training algorithm
+
+**Script:** `train_unified_gpure.py`
+
+| Phase | Modules trained | Loss | Purpose |
+|-------|-----------------|------|---------|
+| **warmup** | Stage 2 (optional Stage 1) | \(\mathcal{L}_{\mathrm{cold}}\) / module losses | Bootstrap from existing ckpts |
+| **joint** | Stage 1 + Stage 2 + composer | \(\mathcal{L}_{\mathrm{GPURE}}\) | **Core contribution**: single backprop through composed HDR |
+| **seam** | + Stage 3 generator | \(\mathcal{L}_{\mathrm{GPURE}} + \mathcal{L}_{\mathrm{GAN}}\) | Seam band refinement |
+
+```
+Algorithm GPURE-Joint:
+  for batch (x_ldr, x_gt, m_trust) in loader:
+    x_G <- Path-G(x_ldr, m_clip)
+    x_C <- Path-C(x_ldr, m_trust)   # restore_hdr_train (differentiable)
+    (x_comp, m_seam) <- TriGateComposer(x_C, x_G, m_trust)
+    L <- compute_gpure_energy(x_comp, x_gt, x_G, x_C, m_seam, m_clip)
+    backprop(L) through x_C path and (where enabled) x_G path
+```
+
+**Dry run (no GPU training):**
+
+```bash
+cd TriGate-HDR && PYTHONPATH=. python -m model.training_scripts.train_unified_gpure --dry_run
+```
+
+---
+
+## 17. Novelty matrix vs SOTA
+
+| Method | Core idea | GPURE differentiation |
+|--------|-----------|----------------------|
+| **ExpoCM (CVPR 2026)** | One-step PF-ODE, exposure trajectories | Dual-path cold+generative; RSO skips; expansion-only cold theorem |
+| **Reti-Diff (ICLR 2025)** | Retinex latent DM + joint RGformer | HDR LDR→HDR with TriGate partition; LDR-anchored expansion cold |
+| **LEDiff / Bracket Diffusion** | Latent exposure brackets + consistency | Single LDR + trust gate + expansion latent cold |
+| **GMODiff (2025)** | One-step gain map refinement | Multi-step cold for radiometric fidelity + generative clips |
+| **Bansal Cold Diffusion** | Generic deterministic corruption | LR-CFP + expansion-only + partitioned energy |
+| **ColdEfficient-LORCD (baseline)** | Dual-stream UNet + RGCF | GPURE formalizes + unifies + RSO + joint objective |
+
+**Novelty verdict:** Defensible for top venues if paper leads with partitioned variational energy, LR-CFP, and RSO—not "three stages trained in sequence."
+
+---
+
+## 18. GPURE implementation map
+
+| File | Equation / role |
+|------|-----------------|
+| `model/unified/optical_cold_forward.py` | LR-CFP \(\ell(x)\), VAE input prep |
+| `model/unified/radiometric_synapse.py` | RSO cell, RSO stem |
+| `model/unified/trigate_composer.py` | \( \hat x_{\mathrm{comp}} \), \(m_{\mathrm{seam}}\) |
+| `model/unified/gpure_energy.py` | \(\mathcal{L}_{\mathrm{GPURE}}\) all terms |
+| `model/unified/trigate_gpure_system.py` | `TriGateGPURESystem` wrapper |
+| `model/training_scripts/train_unified_gpure.py` | Phases warmup / joint / seam |
+| `model/decoders/cold_efficient_blocks.py` | `RGCFBlock(use_rso=...)` |
+| `model/decoders/cold_hdr_diffusion_decoder.py` | `use_lr_cfp`, `use_rso` flags |
+| `model/seaming_model/generator.py` | `SeamingGenerator(use_rso_stem=...)` |
+| `model/training_scripts/val_export.py` | Delegates to `build_composited_input` |
+
+**Backup of pre-GPURE code:** `TriGate-HDR-v1-baseline/` (excludes `*.pt` weights).
+
+---
+
+## 19. 20GB VRAM training guide
+
+### 19.1 What fits on a 20GB GPU
+
+| Configuration | VRAM (approx @ 512²) | Fits 20GB? |
+|---------------|----------------------|------------|
+| Stage-2 only (arch_v2, batch=1, amp) | 10–14 GB | **Yes** |
+| GPURE joint + **frozen** Stage-1 (legacy TriEncoder) | 12–17 GB | **Yes** with `--memory_20gb` |
+| GPURE joint + **trainable** Stage-1 (legacy) | 18–22 GB | Borderline |
+| InstructPix2Pix Stage-1 + Stage-2 **both trainable** | 24–32+ GB | **No** |
+| Full GPURE + Stage-3 GAN training | 20–28 GB | **Seam phase separate** recommended |
+
+### 19.2 Recommended pipeline for 20GB
+
+```bash
+# Phase A: Stage-2 warmup (or resume existing best.pt)
+python -m model.training_scripts.train_stage2_crf_recovery --arch_v2 --use_rso --use_lr_cfp ...
+
+# Phase B: GPURE joint — Stage-2 trains, Stage-1 frozen inference only
+python -m model.training_scripts.train_unified_gpure \
+  --phase joint \
+  --memory_20gb \
+  --use_rso --use_lr_cfp --arch_v2 \
+  --init_stage2 experiments/stage2_lorcd_v2_arch/best.pt \
+  --init_stage1 checkpoints_stage1/best.pt \
+  --checkpoint_dir experiments/gpure_joint_20gb
+```
+
+`--memory_20gb` sets: `batch_size=1`, `max_dim=512`, `amp`, `freeze_stage1=True`, `inference_timesteps=25`, `stage1_inference_steps=10`.
+
+### 19.3 Why frozen Stage-1 is acceptable for joint phase
+
+Gradients from \(\mathcal{L}_{\mathrm{GPURE}}\) still flow into **Path-C** through:
+- \(\mathcal{L}_{\mathrm{rad}}\) on composed HDR (via \(x_C\) in non-clip regions)
+- \(\mathcal{L}_{\mathrm{cold}}\) on Stage-2
+- \(\mathcal{L}_{\mathrm{bracket}}\) (ECC uses detached \(x_G\) — no Stage-1 grad needed)
+
+Stage-1 is updated separately in **warmup** or via pre-trained checkpoint; joint phase optimizes **radiometric alignment** of the cold path to the fixed generative hypothesis in clips.
+
+### 19.4 Validation metrics (unchanged)
+
+All GPURE validation uses `validate_model_mtraining` → `compute_psnr_ssim` → **FHDR/test.py** μ-law PSNR + SSIM. No metric changes from legacy TriGate-HDR.
 
 ---
 

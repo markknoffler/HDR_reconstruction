@@ -1,0 +1,45 @@
+[2026-06-10 01:23:39] Autonomous loop started
+[2026-06-10 01:23:39] v4 already training — monitoring
+[2026-06-10 01:23:39] === Experiment stage2_cold_lorcd_v4 ===
+[2026-06-10 01:23:39] Training already running for stage2_cold_lorcd_v4
+[2026-06-10 01:23:39] Waiting for epoch 5 full val...
+[2026-06-10 01:24:46] Stage-2 trainer agent: monitoring v4, ssim_rgb_l1_weight added for v4b
+[2026-06-10 01:24:52] MONITOR csv_epoch=2 fv_epoch=1 psnr=10.6273 ssim=0.6484 pid=367128
+[2026-06-10 01:35:15] MONITOR csv_epoch=4 fv_epoch=1 psnr=10.6273 ssim=0.6484 pid=367128 (epoch5 full-val pending)
+[2026-06-10 01:46:14] v4 epoch5 COLLAPSE psnr=5.35 ssim=0.2010 streak=2/3 no best.pt (old warm_start kept prior 11.36)
+[2026-06-10 01:48:39] Epoch 5: PSNR=5.3451 SSIM=0.2010
+[2026-06-10 01:48:39] Waiting for epoch 10 or training end...
+[2026-06-10 02:28:39] Epoch 10: PSNR=2.8413 SSIM=0.0295
+[2026-06-10 02:28:39] Finished stage2_cold_lorcd_v4: epoch=10 PSNR=2.8413 SSIM=0.0295
+[2026-06-10 02:28:39] Starting v4b with tuned hyperparams from /home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/experiments/stage2_cold_lorcd_v3/best_epoch_30.pt
+[2026-06-10 02:28:39] === Experiment stage2_cold_lorcd_v4b ===
+[2026-06-10 02:28:40] START /home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/experiments/stage2_cold_lorcd_v4b warm=/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/experiments/stage2_cold_lorcd_v3/best_epoch_30.pt extra=--mu_psnr_loss_weight 4.0 --hdr_loss_weight 4.0 --exp_loss_weight 3.0 --ssim_rgb_l1_weight 3.0 --cold_lr 5e-6 --radiometric_weight 0.01 --early_stop_patience 5
+[2026-06-10 02:28:55] Waiting for epoch 5 full val...
+[2026-06-10 03:13:55] Epoch 5: PSNR=8.9813 SSIM=0.4870
+[2026-06-10 03:13:55] Waiting for epoch 10 or training end...
+[2026-06-10 03:53:55] Epoch 10: PSNR=6.1405 SSIM=0.2679
+[2026-06-10 05:53:56] Finished stage2_cold_lorcd_v4b: epoch=25 PSNR=2.6432 SSIM=0.0269
+[2026-06-10 05:53:57] Starting v5 with base_ch=96 inference_timesteps=100
+[2026-06-10 05:53:57] === Experiment stage2_cold_lorcd_v5 ===
+[2026-06-10 05:53:57] START /home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/experiments/stage2_cold_lorcd_v5 warm=/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/experiments/stage2_cold_lorcd_v3/best_epoch_30.pt extra=--base_ch 96 --inference_timesteps 100 --mu_psnr_loss_weight 5.0 --hdr_loss_weight 6.0 --cold_lr 5e-6
+[2026-06-10 05:54:12] Waiting for epoch 5 full val...
+[2026-06-10 10:25:29] Autonomous loop started
+[2026-06-10 10:25:29] v4/v4b done — starting v6 conservative fine-tune from v3 best
+[2026-06-10 10:25:29] === Experiment stage2_cold_lorcd_v6 ===
+[2026-06-10 10:25:29] START /home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/experiments/stage2_cold_lorcd_v6 warm=/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/experiments/stage2_cold_lorcd_v3/best_epoch_30.pt extra=--cold_lr 5e-5 --mu_psnr_loss_weight 0.5 --hdr_loss_weight 1.0 --exp_loss_weight 2.0 --anchor_exp_weight 0.5 --anchor_hdr_weight 0.5 --radiometric_weight 0.02 --early_stop_patience 5 --inference_timesteps 50
+[2026-06-10 10:25:44] Waiting for epoch 5 full val...
+[2026-06-10 11:55:44] Epoch 5: PSNR=3.7387 SSIM=0.0640
+[2026-06-10 11:55:44] Waiting for epoch 10 or training end...
+[2026-06-10 13:15:45] Epoch 10: PSNR=3.3616 SSIM=0.0384
+[2026-06-10 17:10:46] Finished stage2_cold_lorcd_v6: epoch=25 PSNR=2.6214 SSIM=0.0124
+[2026-06-10 17:10:47] Starting v7 low-LR polish
+[2026-06-10 17:10:47] === Experiment stage2_cold_lorcd_v7 ===
+[2026-06-10 17:10:47] START /home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/experiments/stage2_cold_lorcd_v7 warm=/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/experiments/stage2_cold_lorcd_v3/best_epoch_30.pt extra=--cold_lr 2e-5 --mu_psnr_loss_weight 1.0 --radiometric_weight 0 --early_stop_patience 5
+[2026-06-10 17:11:02] Waiting for epoch 5 full val...
+[2026-06-10 17:56:02] Epoch 5: PSNR=5.4416 SSIM=0.1996
+[2026-06-10 17:56:02] Waiting for epoch 10 or training end...
+[2026-06-10 18:36:03] Epoch 10: PSNR=3.0407 SSIM=0.0355
+[2026-06-10 20:36:03] Finished stage2_cold_lorcd_v7: epoch=25 PSNR=2.5733 SSIM=0.0152
+[2026-06-10 20:36:03] Autonomous loop completed. Best: /home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/experiments/stage2_cold_lorcd_v3/best_epoch_30.pt
+[2026-06-10 20:53:28] watch_v8 started
+31,0.903458,0,7.6134,0.4331,0.0000,0.0000,,,,,0,train_probe_50

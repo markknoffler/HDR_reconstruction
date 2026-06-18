@@ -186,6 +186,16 @@ def main():
         action="store_true",
         help="Preset: base_ch=96, latent_ch=8, vae_base_ch=48, pixel_refiner, metric-aligned losses.",
     )
+    parser.add_argument(
+        "--use_rso",
+        action="store_true",
+        help="GPURE: Radiometric Synapse Operators (RSO) at RGCF skip fusions.",
+    )
+    parser.add_argument(
+        "--use_lr_cfp",
+        action="store_true",
+        help="GPURE: Log-Radiance Cold Forward Process (LR-CFP) VAE encoding.",
+    )
     parser.add_argument("--vae_warmup_epochs", type=int, default=8, help="VAE-only warmup before cold training.")
     parser.add_argument("--hdr_loss_weight", type=float, default=1.0, help="Pixel HDR L1 weight (cold phase).")
     parser.add_argument("--cold_loss_weight", type=float, default=1.0)
@@ -344,7 +354,7 @@ def main():
     print(
         f"[Stage2-LORCD] timesteps={args.timesteps} base_ch={args.base_ch} latent_ch={args.latent_ch} "
         f"vae_base_ch={args.vae_base_ch} pixel_refiner={args.use_pixel_refiner} "
-        f"vae_warmup={args.vae_warmup_epochs}"
+        f"vae_warmup={args.vae_warmup_epochs} use_rso={args.use_rso} use_lr_cfp={args.use_lr_cfp}"
     )
     model = ColdHDRDiffusion(
         timesteps=args.timesteps,
@@ -354,6 +364,8 @@ def main():
         use_pixel_refiner=args.use_pixel_refiner,
         refiner_base_ch=args.refiner_base_ch,
         refiner_blocks=args.refiner_blocks,
+        use_rso=args.use_rso,
+        use_lr_cfp=args.use_lr_cfp,
     ).to(device)
     model.inference_timesteps = int(args.inference_timesteps)
     optimizer = optim.AdamW(model.parameters(), lr=args.lr)

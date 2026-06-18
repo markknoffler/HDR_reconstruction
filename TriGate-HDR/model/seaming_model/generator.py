@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ..unified.radiometric_synapse import RSOStem
+
 
 class SeamGatedBlock(nn.Module):
     def __init__(self, ch):
@@ -30,15 +32,22 @@ class SeamGatedBlock(nn.Module):
 
 
 class SeamingGenerator(nn.Module):
-    def __init__(self, base_ch=64):
+    def __init__(self, base_ch=64, use_rso_stem: bool = False):
         super().__init__()
-        self.stem = nn.Conv2d(7, base_ch, 3, padding=1)
+        self.use_rso_stem = bool(use_rso_stem)
+        if self.use_rso_stem:
+            self.stem = RSOStem(in_ch=7, out_ch=base_ch)
+        else:
+            self.stem = nn.Conv2d(7, base_ch, 3, padding=1)
         self.blocks = nn.ModuleList([SeamGatedBlock(base_ch) for _ in range(6)])
         self.tail = nn.Sequential(nn.Conv2d(base_ch, base_ch, 3, padding=1), nn.LeakyReLU(0.2, inplace=True), nn.Conv2d(base_ch, 3, 1))
 
     def forward(self, base_hdr_x, generated_clip_hdr, seam_mask):
-        x = torch.cat([base_hdr_x, generated_clip_hdr, seam_mask], dim=1)
-        x = self.stem(x)
+        if self.use_rso_stem:
+            x = self.stem(base_hdr_x, generated_clip_hdr, seam_mask)
+        else:
+            x = torch.cat([base_hdr_x, generated_clip_hdr, seam_mask], dim=1)
+            x = self.stem(x)
         for block in self.blocks:
             x = block(x, seam_mask)
         residual = self.tail(x)

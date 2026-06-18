@@ -6,9 +6,9 @@ from .discriminator import SeamingDiscriminator
 
 
 class SeamingGANSystem(nn.Module):
-    def __init__(self):
+    def __init__(self, use_rso_stem: bool = False):
         super().__init__()
-        self.generator = SeamingGenerator()
+        self.generator = SeamingGenerator(use_rso_stem=use_rso_stem)
         self.discriminator = SeamingDiscriminator()
 
     def forward(self, base_hdr_x, generated_clip_hdr, seam_mask):

@@ -106,16 +106,10 @@ def validate_model_mtraining(
     )
 
 
-def _build_composited_input(stage2_hdr, stage1_hdr, gate):
-    clip_mask = (1.0 - gate).clamp(0.0, 1.0)
-    composed = stage2_hdr * (1.0 - clip_mask) + stage1_hdr * clip_mask
-    dilated = F.max_pool2d(clip_mask, kernel_size=17, stride=1, padding=8)
-    eroded = -F.max_pool2d(-clip_mask, kernel_size=9, stride=1, padding=4)
-    seam_band = (dilated - eroded).clamp(0.0, 1.0)
-    seam_band = torch.maximum(seam_band, clip_mask)
-    return composed, seam_band
+from ..unified.trigate_composer import build_composited_input
 
-
+# Backward-compatible alias used by make_stage3_predictor.
+_build_composited_input = build_composited_input
 def make_stage1_predictor(model):
     def predict(batch, input_ldr, ground_truth, device):
         segmap = batch.get("segmap", input_ldr)
@@ -263,5 +257,34 @@ def make_stage3_predictor(stage1, stage2, generator):
         stage2_hdr = stage2.restore_hdr(input_ldr, gate=gate)
         composed, seam_mask = _build_composited_input(stage2_hdr, gen_clip, gate)
         return generator(composed, gen_clip, seam_mask)
+
+    return predict
+
+
+def make_gpure_predictor(system):
+    """
+    Validation predictor for TriGateGPURESystem.
+    Uses full composed HDR (Path-C + Path-G [+ Path-S]) — metrics via validate_model_mtraining
+    (FHDR/test.py PSNR-μ + SSIM, unchanged).
+    """
+
+    def predict(batch, input_ldr, ground_truth, device):
+        gate = batch.get("gate")
+        if gate is not None:
+            gate = gate.to(device)
+        segmap = batch.get("segmap", input_ldr)
+        if not torch.is_tensor(segmap):
+            segmap = input_ldr
+        else:
+            segmap = segmap.to(device)
+        batch_in = {"ldr_image": input_ldr, "gate": gate, "segmap": segmap}
+        was_training = system.training
+        system.eval()
+        try:
+            with torch.no_grad():
+                outputs = system(batch_in, mode="eval")
+            return outputs.x_final
+        finally:
+            system.train(was_training)
 
     return predict

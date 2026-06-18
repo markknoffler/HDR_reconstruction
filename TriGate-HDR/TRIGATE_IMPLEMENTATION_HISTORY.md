@@ -257,3 +257,102 @@ python -u -m model.training_scripts.train_stage2_crf_recovery \
 | `model/training_scripts/common_training.py` | FHDR metrics |
 | `TRIGATE_PIPELINE_GUIDE.md` | Operational guide |
 | `TRIGATE_IMPLEMENTATION_HISTORY.md` | This file |
+
+---
+
+## 10. GPURE architecture upgrade (2025-06 — top-venue preparation)
+
+### 10.1 User goal
+
+Submit TriGate-HDR to **CVPR / ICLR / ICML**. Reviewer concern: the legacy pipeline is **orchestration** (Stage 1 → 2 → 3 trained separately, composition in `val_export.py`) rather than a **single mathematically principled optimization objective**.
+
+**Requirements:**
+- **Keep** cold diffusion foundation (LDR anchor, expansion-only cold, generative clips, seaming).
+- **Significantly augment** with mathematical novelty (not full rewrite).
+- Backup code + CSV (no `.pt` weights) before changes.
+- Update `model_architecture.md` as paper source; log decisions here.
+- **No GPU training** during implementation pass.
+
+### 10.2 Decision: GPURE paradigm
+
+**Chosen:** Gate-Partitioned Unified Radiance Energy (**GPURE**)
+
+**Why not alternatives considered:**
+| Alternative | Rejected because |
+|-------------|------------------|
+| Single merged UNet | Loses pretrained Stage 1 generative prior + cold radiometric path |
+| End-to-end IP2P only | Poor radiometric fidelity in non-clip regions; no LDR anchor |
+| Pure ExpoCM-style one-step ODE | Different foundation; abandons cold expansion + tri-gate partition |
+| Keep orchestration, add losses only | Does not fix gradient flow through composed output |
+
+**GPURE adds:**
+1. **LR-CFP** — log-radiance cold forward (`OpticalColdForward`)
+2. **RSO** — radiometric synapse operators at RGCF skips (`RSOCell`, `RSOStem`)
+3. **ECC** — exposure-bracket consistency on seam band (`bracket_consistency_loss`)
+4. **TriGateComposer** — differentiable composition inside model graph
+5. **TriGateGPURESystem** + `train_unified_gpure.py` — joint energy Phases warmup / joint / seam
+
+### 10.3 Implementation log
+
+| Date | Change | Why |
+|------|--------|-----|
+| 2025-06 | Backup → `TriGate-HDR-v1-baseline/` | Preserve pre-GPURE code + CSV |
+| 2025-06 | `model/unified/` package | GPURE modules isolated, importable |
+| 2025-06 | `RGCFBlock(use_rso=True)` | Domain-specific skip fusion vs generic conv gates |
+| 2025-06 | `ColdHDRDiffusion(use_lr_cfp=True)` | Optically calibrated VAE encoding |
+| 2025-06 | `val_export` → `build_composited_input` | Single source of truth for composition |
+| 2025-06 | `SeamingGenerator(use_rso_stem=True)` | RSO at Stage 3 stem |
+| 2025-06 | `train_unified_gpure.py --dry_run` | CPU smoke test without GPU training |
+| 2025-06 | `model_architecture.md` §13–18 | Paper-level math + novelty matrix |
+
+### 10.4 Training commands (when GPUs free)
+
+**Dry run (CPU, no training):**
+```bash
+cd TriGate-HDR && PYTHONPATH=. python -m model.training_scripts.train_unified_gpure --dry_run
+```
+
+**Phase B — joint GPURE (recommended starting point after Stage 2 ckpt):**
+```bash
+cd TriGate-HDR && PYTHONPATH=. python -m model.training_scripts.train_unified_gpure \
+  --phase joint \
+  --use_rso --use_lr_cfp \
+  --init_stage2 experiments/stage2_lorcd_v2_arch/best.pt \
+  --checkpoint_dir experiments/gpure_joint_v1 \
+  --epochs 30 --batch_size 1 --max_dim 512
+```
+
+**Stage 2 with GPURE flags (backward compatible, flags off by default):**
+```bash
+python -m model.training_scripts.train_stage2_crf_recovery \
+  --use_rso --use_lr_cfp --arch_v2 ...
+```
+
+### 10.5 Open ablation questions
+
+- Optimal \(\lambda_b\) (bracket) vs \(\lambda_c\) (cold) for joint phase
+- Soft seam blend (`soft_seam_gamma`) during joint vs hard compose
+- Whether to use InstructPix2Pix Stage 1 vs legacy Stage1TriEncoder in unified trainer for production
+- LR-CFP learnable \(k\) vs fixed μ=5000
+
+### 10.6 Data validation (same as Stage 2)
+
+`train_unified_gpure.py` now mirrors Stage-2 validation:
+- Trial val before epoch 1
+- Per-epoch train/val probe PSNR-μ + SSIM (FHDR/test.py)
+- Full val every `--full_val_every` epochs
+- `training_metrics.csv` in checkpoint dir
+- `validation_results/epoch_N/` HDR exports
+- `make_gpure_predictor` in `val_export.py`
+
+**20GB command:**
+```bash
+python -m model.training_scripts.train_unified_gpure \
+  --phase joint --memory_20gb --use_rso --use_lr_cfp --arch_v2 \
+  --init_stage2 experiments/stage2_lorcd_v2_arch/best.pt \
+  --checkpoint_dir experiments/gpure_joint_20gb
+```
+
+See `GPURE_NOVELTY_CHECK.md` for in-depth novelty analysis.
+
+---

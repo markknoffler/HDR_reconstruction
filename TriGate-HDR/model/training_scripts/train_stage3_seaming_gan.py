@@ -24,17 +24,7 @@ from .common_training import (
 )
 from .dataset_splits import build_dataloaders
 from .val_export import make_stage3_predictor, validate_model_mtraining
-
-
-def build_composited_input(stage2_hdr, stage1_hdr, gate):
-    clip_mask = (1.0 - gate).clamp(0.0, 1.0)
-    composed = stage2_hdr * (1.0 - clip_mask) + stage1_hdr * clip_mask
-    dilated = F.max_pool2d(clip_mask, kernel_size=17, stride=1, padding=8)
-    eroded = -F.max_pool2d(-clip_mask, kernel_size=9, stride=1, padding=4)
-    seam_band = (dilated - eroded).clamp(0.0, 1.0)
-    seam_band = torch.maximum(seam_band, clip_mask)
-    return composed, seam_band
-
+from ..unified.trigate_composer import build_composited_input
 
 def _resolve_stage_ckpt(path_arg: str, default_dir: str) -> str:
     if path_arg and os.path.isfile(path_arg):

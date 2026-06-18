@@ -14,6 +14,7 @@ import torch.nn.functional as F
 from .cold_efficient_blocks import ColdEfficientLatentUNet
 from .mini_hdr_vae import MiniHDRVAE
 from .pixel_hdr_refiner import PixelHDRRefiner, sobel_gradient_loss
+from ..unified.optical_cold_forward import OpticalColdForward
 
 
 class ColdHDRDiffusion(nn.Module):
@@ -36,19 +37,24 @@ class ColdHDRDiffusion(nn.Module):
         use_pixel_refiner: bool = False,
         refiner_base_ch: int = 48,
         refiner_blocks: int = 6,
+        use_rso: bool = False,
+        use_lr_cfp: bool = False,
     ):
         super().__init__()
         self.vae = vae if vae is not None else MiniHDRVAE(
             latent_ch=latent_ch, base_ch=vae_base_ch, kl_weight=vae_kl_weight
         )
         self.model = model if model is not None else ColdEfficientLatentUNet(
-            latent_ch=latent_ch, base_ch=base_ch
+            latent_ch=latent_ch, base_ch=base_ch, use_rso=use_rso
         )
         self.timesteps = int(timesteps)
         self.inference_timesteps = int(timesteps)
         self.latent_ch = latent_ch
         self.vae_frozen = False
         self.use_pixel_refiner = bool(use_pixel_refiner)
+        self.use_rso = bool(use_rso)
+        self.use_lr_cfp = bool(use_lr_cfp)
+        self.optical_cold = OpticalColdForward() if self.use_lr_cfp else None
         self.pixel_refiner = (
             PixelHDRRefiner(base_ch=refiner_base_ch, num_blocks=refiner_blocks)
             if self.use_pixel_refiner
@@ -97,9 +103,15 @@ class ColdHDRDiffusion(nn.Module):
             return hdr_coarse
         return self.pixel_refiner(ldr_hdr, hdr_coarse)
 
+    def _prepare_encoding_inputs(self, hdr: torch.Tensor, ldr_hdr: torch.Tensor):
+        if self.use_lr_cfp and self.optical_cold is not None:
+            return self.optical_cold.prepare_vae_input(hdr), self.optical_cold.prepare_vae_input(ldr_hdr)
+        return hdr, ldr_hdr
+
     def _encode_pair(self, hdr: torch.Tensor, ldr_hdr: torch.Tensor):
-        z_hdr, mu_h, lv_h = self.vae.encode(hdr, sample=True)
-        z_ldr, mu_l, lv_l = self.vae.encode(ldr_hdr, sample=True)
+        hdr_in, ldr_in = self._prepare_encoding_inputs(hdr, ldr_hdr)
+        z_hdr, mu_h, lv_h = self.vae.encode(hdr_in, sample=True)
+        z_ldr, mu_l, lv_l = self.vae.encode(ldr_in, sample=True)
         return z_hdr, z_ldr, mu_h, lv_h, mu_l, lv_l
 
     def _decompose(self, z_hdr: torch.Tensor, z_ldr: torch.Tensor):
@@ -123,12 +135,13 @@ class ColdHDRDiffusion(nn.Module):
         device = hdr.device
 
         encode_sample = not self.vae_frozen
-        z_hdr, mu_h, lv_h = self.vae.encode(hdr, sample=encode_sample)
-        z_ldr, mu_l, lv_l = self.vae.encode(ldr_hdr, sample=encode_sample)
+        hdr_in, ldr_in = self._prepare_encoding_inputs(hdr, ldr_hdr)
+        z_hdr, mu_h, lv_h = self.vae.encode(hdr_in, sample=encode_sample)
+        z_ldr, mu_l, lv_l = self.vae.encode(ldr_in, sample=encode_sample)
         recon_hdr = self.vae.decode(z_hdr)
         recon_ldr = self.vae.decode(z_ldr)
-        vae_loss_h, vae_parts_h = self.vae.vae_loss(hdr, recon_hdr, mu_h, lv_h)
-        vae_loss_l, _ = self.vae.vae_loss(ldr_hdr, recon_ldr, mu_l, lv_l)
+        vae_loss_h, vae_parts_h = self.vae.vae_loss(hdr_in, recon_hdr, mu_h, lv_h)
+        vae_loss_l, _ = self.vae.vae_loss(ldr_in, recon_ldr, mu_l, lv_l)
         vae_loss = vae_loss_h + 0.5 * vae_loss_l
 
         if vae_only:
@@ -235,7 +248,8 @@ class ColdHDRDiffusion(nn.Module):
         b = ldr_hdr.shape[0]
         device = ldr_hdr.device
 
-        z_ldr, _, _ = self.vae.encode(ldr_hdr, sample=False)
+        _, ldr_in = self._prepare_encoding_inputs(ldr_hdr, ldr_hdr)
+        z_ldr, _, _ = self.vae.encode(ldr_in, sample=False)
         z_lift = self.vae.mln(z_ldr)
 
         if gate is None:

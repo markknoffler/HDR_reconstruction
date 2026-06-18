@@ -63,21 +63,44 @@ class RGCFBlock(nn.Module):
     Trust-gated radiance fusion (conv cross-gate, O(HW) memory).
     tau ~ 1: lock to anchor; tau ~ 0: inject anchor context into cold stream.
     Full spatial attention was removed — it OOMs at 64x64 latent on 12GB GPUs.
+
+    When use_rso=True, delegates to Radiometric Synapse Operators (RSO).
     """
 
-    def __init__(self, cold_ch: int, anchor_ch: int, heads: int = 4):  # noqa: ARG002
+    def __init__(
+        self,
+        cold_ch: int,
+        anchor_ch: int,
+        heads: int = 4,  # noqa: ARG002
+        use_rso: bool = False,
+        time_dim: int | None = None,
+    ):
         super().__init__()
-        mid = max(cold_ch, anchor_ch)
-        self.cross_gate = nn.Sequential(
-            nn.Conv2d(cold_ch + anchor_ch, mid, 3, padding=1),
-            nn.SiLU(inplace=True),
-            nn.Conv2d(mid, cold_ch, 1),
-            nn.Sigmoid(),
-        )
-        self.cross_proj = nn.Conv2d(anchor_ch, cold_ch, 1)
-        self.anchor_proj = nn.Conv2d(anchor_ch, cold_ch, 1)
+        self.use_rso = bool(use_rso)
+        if self.use_rso:
+            from ..unified.radiometric_synapse import RSOCell
 
-    def forward(self, cold: torch.Tensor, anchor: torch.Tensor, trust: torch.Tensor) -> torch.Tensor:
+            self.rso = RSOCell(cold_ch, anchor_ch, time_dim=time_dim)
+        else:
+            mid = max(cold_ch, anchor_ch)
+            self.cross_gate = nn.Sequential(
+                nn.Conv2d(cold_ch + anchor_ch, mid, 3, padding=1),
+                nn.SiLU(inplace=True),
+                nn.Conv2d(mid, cold_ch, 1),
+                nn.Sigmoid(),
+            )
+            self.cross_proj = nn.Conv2d(anchor_ch, cold_ch, 1)
+            self.anchor_proj = nn.Conv2d(anchor_ch, cold_ch, 1)
+
+    def forward(
+        self,
+        cold: torch.Tensor,
+        anchor: torch.Tensor,
+        trust: torch.Tensor,
+        time_emb: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if self.use_rso:
+            return self.rso(cold, anchor, trust, time_emb=time_emb)
         if trust.shape[-2:] != cold.shape[-2:]:
             trust = F.interpolate(trust, size=cold.shape[-2:], mode="bilinear", align_corners=False)
         trust = trust.clamp(0, 1)
@@ -93,10 +116,17 @@ class ColdEfficientLatentUNet(nn.Module):
     Predicts z_exp_0 (expansion latent).
     """
 
-    def __init__(self, latent_ch: int = 4, base_ch: int = 64, num_levels: int = 4):
+    def __init__(
+        self,
+        latent_ch: int = 4,
+        base_ch: int = 64,
+        num_levels: int = 4,
+        use_rso: bool = False,
+    ):
         super().__init__()
         self.latent_ch = latent_ch
         self.num_levels = num_levels
+        self.use_rso = bool(use_rso)
         time_dim = base_ch * 4
         self.time_mlp = TimeMLP(base_ch, time_dim)
 
@@ -118,14 +148,18 @@ class ColdEfficientLatentUNet(nn.Module):
             self.cold_down.append(ResBlock(in_c, out_c, time_dim))
             self.anchor_down.append(ResBlock(in_c, out_c, time_dim=None))
             self.lateral_projs.append(nn.Conv2d(out_c, out_c, 1))
-            self.rgcf_blocks.append(RGCFBlock(out_c, out_c))
+            self.rgcf_blocks.append(
+                RGCFBlock(out_c, out_c, use_rso=self.use_rso, time_dim=time_dim if self.use_rso else None)
+            )
             if i < len(ch_mult) - 1:
                 self.cold_pools.append(nn.Conv2d(out_c, out_c, 4, 2, 1))
                 self.anchor_pools.append(nn.Conv2d(out_c, out_c, 4, 2, 1))
             in_c = out_c
 
         self.mid = ResBlock(in_c, in_c, time_dim)
-        self.mid_rgcf = RGCFBlock(in_c, in_c)
+        self.mid_rgcf = RGCFBlock(
+            in_c, in_c, use_rso=self.use_rso, time_dim=time_dim if self.use_rso else None
+        )
 
         self.cold_up = nn.ModuleList()
         self.up_projs = nn.ModuleList()
@@ -138,7 +172,9 @@ class ColdEfficientLatentUNet(nn.Module):
                     ResBlock(out_c + skip_c, out_c, time_dim),
                 )
             )
-            self.up_projs.append(RGCFBlock(out_c, skip_c))
+            self.up_projs.append(
+                RGCFBlock(out_c, skip_c, use_rso=self.use_rso, time_dim=time_dim if self.use_rso else None)
+            )
             in_c = out_c
 
         self.head = nn.Sequential(
@@ -166,7 +202,7 @@ class ColdEfficientLatentUNet(nn.Module):
         for i, (cd, ad) in enumerate(zip(self.cold_down, self.anchor_down)):
             cold = cd(cold, time_emb)
             anchor = ad(anchor)
-            fused = self.rgcf_blocks[i](cold, anchor, trust)
+            fused = self.rgcf_blocks[i](cold, anchor, trust, time_emb=time_emb if self.use_rso else None)
             cold_skips.append(fused)
             anchor_skips.append(anchor)
             cold_feats.append(fused)
@@ -176,13 +212,15 @@ class ColdEfficientLatentUNet(nn.Module):
                 cold = cold + self.lateral_projs[i](anchor)
 
         cold = self.mid(cold, time_emb)
-        cold = self.mid_rgcf(cold, anchor_skips[-1], trust)
+        cold = self.mid_rgcf(
+            cold, anchor_skips[-1], trust, time_emb=time_emb if self.use_rso else None
+        )
 
         for i, up in enumerate(self.cold_up):
             cold = up[0](cold)
             skip = cold_skips[-(i + 2)]
             anc = anchor_skips[-(i + 2)]
-            cold = self.up_projs[i](cold, anc, trust)
+            cold = self.up_projs[i](cold, anc, trust, time_emb=time_emb if self.use_rso else None)
             cold = up[1](torch.cat([cold, skip], dim=1), time_emb)
 
         z_exp_pred = self.head(cold)
