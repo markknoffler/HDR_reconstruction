@@ -23,6 +23,12 @@ from tqdm import tqdm
 from ..decoders.cold_hdr_diffusion_decoder import ColdHDRDiffusion
 from ..losses.stage_composite_losses import stage2_loss
 from ..losses.radiometric_losses import HybridRadiometricConsistencyLoss
+from ..metrics.expo_metrics import (
+    ExpoMetricVector,
+    average_expo_metrics,
+    compute_expo_metrics_pair,
+    format_expo_table_row,
+)
 from .common_training import (
     HDRVDPMetrics,
     ModelEMA,
@@ -137,6 +143,43 @@ def _append_stage2_metrics_csv(
     print(f"  Metrics CSV updated: {csv_path}")
 
 
+@torch.no_grad()
+def _evaluate_expo_benchmark_loader(
+    loader,
+    device,
+    predict_fn,
+    hdrvdp_calculator,
+    *,
+    amp: bool,
+    desc: str,
+):
+    if loader is None or len(loader.dataset) == 0:
+        return None
+    vectors = []
+    for batch in tqdm(loader, desc=desc):
+        ldr = batch["ldr_image"].to(device)
+        gt = batch["hdr_image"].to(device)
+        with autocast("cuda", enabled=amp and device.type == "cuda"):
+            pred = predict_fn(batch, ldr, gt, device).float()
+        for i in range(pred.shape[0]):
+            vectors.append(compute_expo_metrics_pair(pred[i], gt[i], hdrvdp_calculator))
+    return average_expo_metrics(vectors)
+
+
+def _append_benchmark_metrics_csv(csv_path, epoch, split_name, metrics: ExpoMetricVector):
+    os.makedirs(os.path.dirname(csv_path) or ".", exist_ok=True)
+    file_exists = os.path.isfile(csv_path)
+    fieldnames = ["epoch", "split"] + ExpoMetricVector.csv_header()
+    with open(csv_path, "a", newline="") as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        if not file_exists:
+            writer.writeheader()
+        row = {"epoch": epoch, "split": split_name}
+        for key, val in metrics.as_dict().items():
+            row[key] = f"{val:.6f}"
+        writer.writerow(row)
+
+
 def main():
     _defaults = default_hrishav_data_paths()
     parser = argparse.ArgumentParser(
@@ -222,7 +265,7 @@ def main():
     parser.add_argument(
         "--inference_loss_weight",
         type=float,
-        default=0.0,
+        default=None,
         help="Weight for differentiable restore_hdr loss. Enable 0.2–0.3 only after val PSNR is stable.",
     )
     parser.add_argument(
@@ -321,6 +364,17 @@ def main():
         default=10,
         help="Full validation every N epochs (+ final epoch).",
     )
+    parser.add_argument(
+        "--benchmark_metrics",
+        action="store_true",
+        help="Log ExpoCM Table-1 metrics (PSNR-l/μ/PU, MS-SSIM, LPIPS, ΔE2000) each epoch.",
+    )
+    parser.add_argument(
+        "--benchmark_metrics_csv",
+        type=str,
+        default="benchmark_metrics.csv",
+        help="CSV filename (under checkpoint_dir) for ExpoCM Table-1 metrics.",
+    )
     add_subset_args(parser)
     args = parser.parse_args()
     args = apply_smoke_test_args(args)
@@ -335,10 +389,14 @@ def main():
         args.ssim_rgb_l1_weight = 0.35
         args.anchor_exp_weight = 0.5
         args.anchor_hdr_weight = 0.5
-        args.inference_loss_weight = 0.1
+        if args.inference_loss_weight is None:
+            args.inference_loss_weight = 0.1
         args.train_inference_steps = 25
         args.inference_loss_every = 50
         print("[arch_v2] Enabled: wider VAE/UNet, pixel refiner, metric-aligned losses.")
+
+    if args.inference_loss_weight is None:
+        args.inference_loss_weight = 0.0
 
     args.ldr_dir = sanitize_data_path(args.ldr_dir)
     args.hdr_dir = sanitize_data_path(args.hdr_dir)
@@ -350,6 +408,7 @@ def main():
     validation_root = args.validation_results_dir or os.path.join(args.checkpoint_dir, "validation_results")
     os.makedirs(validation_root, exist_ok=True)
     csv_path = os.path.join(args.checkpoint_dir, "training_metrics.csv")
+    benchmark_csv_path = os.path.join(args.checkpoint_dir, args.benchmark_metrics_csv)
 
     print(
         f"[Stage2-LORCD] timesteps={args.timesteps} base_ch={args.base_ch} latent_ch={args.latent_ch} "
@@ -774,6 +833,35 @@ def main():
                 f"  Val-Full PSNR/SSIM/H2/H3: {val_full_psnr:.4f} / {val_full_ssim:.4f} "
                 f"/ {val_full_h2:.4f} / {val_full_h3:.4f}"
             )
+
+        if args.benchmark_metrics and not vae_only:
+            def _log_benchmark_split(loader, split_key: str, label: str):
+                if loader is None or len(loader.dataset) == 0:
+                    return
+                metrics = _evaluate_expo_benchmark_loader(
+                    loader,
+                    device,
+                    predict_fn,
+                    hdrvdp_calculator,
+                    amp=args.amp,
+                    desc=f"Benchmark {split_key}",
+                )
+                if metrics is None:
+                    return
+                print(f"  TriGate {label}: {format_expo_table_row(metrics)}")
+                _append_benchmark_metrics_csv(benchmark_csv_path, epoch, split_key, metrics)
+
+            _log_benchmark_split(train_probe_loader, "train", "train")
+            if val_loader is not None:
+                val_subset_loader = _make_subset_loader(
+                    val_loader,
+                    max(1, args.val_eval_samples),
+                    args.num_workers,
+                    args.val_export_seed + epoch + 10000,
+                )
+                _log_benchmark_split(val_subset_loader, "val", "val")
+            if do_full and val_loader is not None:
+                _log_benchmark_split(val_loader, "val-full", "val-F")
 
         if ema_backup is not None:
             ema.restore(model, ema_backup)
