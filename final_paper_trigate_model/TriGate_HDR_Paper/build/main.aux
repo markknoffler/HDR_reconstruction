@@ -1,0 +1,177 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{fhdr}
+\citation{singlehdr}
+\citation{lediff}
+\citation{expocm}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\newlabel{sec:intro}{{1}{1}{Introduction}{section.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Contributions}{1}{subsection.1.1}\protected@file@percent }
+\citation{debevec1997}
+\citation{hdrcnn}
+\citation{singlehdr}
+\citation{fhdr}
+\citation{santos2020}
+\citation{arthdr}
+\citation{histohdr}
+\citation{lediff}
+\citation{exposurediffusion}
+\citation{expocm}
+\citation{colddiffusion}
+\citation{retidiff}
+\citation{instructpix2pix}
+\citation{lora}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Related Work}{2}{section.2}\protected@file@percent }
+\newlabel{sec:related}{{2}{2}{Related Work}{section.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Single-Image HDR Reconstruction}{2}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Diffusion-Based HDR Methods}{2}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Cold Diffusion}{2}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Instruction-Guided Latent Diffusion}{2}{subsection.2.4}\protected@file@percent }
+\citation{wgangp}
+\citation{pix2pix}
+\citation{instructpix2pix}
+\citation{sam}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.5}GAN-Based Seam Refinement}{3}{subsection.2.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Method}{3}{section.3}\protected@file@percent }
+\newlabel{sec:method}{{3}{3}{Method}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Problem Formulation}{3}{subsection.3.1}\protected@file@percent }
+\newlabel{eq:ldr-formation}{{1}{3}{Problem Formulation}{equation.3.1}{}}
+\newlabel{eq:gate}{{2}{3}{Problem Formulation}{equation.3.2}{}}
+\newlabel{eq:seam-mask}{{3}{3}{Problem Formulation}{equation.3.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Stage 1 --- Path-G: Masked Generative Diffusion}{3}{subsection.3.2}\protected@file@percent }
+\newlabel{eq:gaussian-fwd}{{4}{3}{Stage 1 --- Path-G: Masked Generative Diffusion}{equation.3.4}{}}
+\newlabel{eq:tristream}{{7}{3}{Stage 1 --- Path-G: Masked Generative Diffusion}{equation.3.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Stage 2 --- Path-C: Cold Radiometric Expansion}{3}{subsection.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.1}Log-Radiance Cold Forward Process (LR-CFP)}{3}{subsubsection.3.3.1}\protected@file@percent }
+\newlabel{eq:lrcfp}{{8}{3}{Log-Radiance Cold Forward Process (LR-CFP)}{equation.3.8}{}}
+\newlabel{eq:vae-encode}{{9}{3}{Log-Radiance Cold Forward Process (LR-CFP)}{equation.3.9}{}}
+\citation{colddiffusion}
+\newlabel{eq:monolift}{{10}{4}{Log-Radiance Cold Forward Process (LR-CFP)}{equation.3.10}{}}
+\newlabel{eq:expansion-field}{{11}{4}{Log-Radiance Cold Forward Process (LR-CFP)}{equation.3.11}{}}
+\newlabel{eq:cold-fwd}{{12}{4}{Log-Radiance Cold Forward Process (LR-CFP)}{equation.3.12}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.2}Identifiability Theorem}{4}{subsubsection.3.3.2}\protected@file@percent }
+\newlabel{sec:theorem}{{3.3.2}{4}{Identifiability Theorem}{subsubsection.3.3.2}{}}
+\newlabel{thm:identifiability}{{1}{4}{LR-CFP Identifiability}{theorem.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.3}ColdEfficientLatentUNet}{4}{subsubsection.3.3.3}\protected@file@percent }
+\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces Reverse Cold Sampling (\texttt  {restore\_hdr})}}{4}{algorithm.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{alg:reverse}{{1}{4}{Reverse Cold Sampling (\texttt {restore\_hdr})}{algorithm.1}{}}
+\newlabel{eq:rgcf}{{13}{4}{ColdEfficientLatentUNet}{equation.3.13}{}}
+\newlabel{eq:scale-adaptive}{{14}{4}{ColdEfficientLatentUNet}{equation.3.14}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Radiometric Synapse Operators (RSO)}{4}{subsection.3.4}\protected@file@percent }
+\newlabel{eq:rso}{{15}{4}{Radiometric Synapse Operators (RSO)}{equation.3.15}{}}
+\citation{wgangp}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Stage 3 --- Path-S: Seaming WGAN}{5}{subsection.3.5}\protected@file@percent }
+\newlabel{eq:compose}{{16}{5}{Stage 3 --- Path-S: Seaming WGAN}{equation.3.16}{}}
+\newlabel{eq:seam-out}{{17}{5}{Stage 3 --- Path-S: Seaming WGAN}{equation.3.17}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6}GPURE: Unified Variational Energy}{5}{subsection.3.6}\protected@file@percent }
+\newlabel{eq:gpure}{{20}{5}{GPURE: Unified Variational Energy}{equation.3.20}{}}
+\newlabel{eq:lrad}{{21}{5}{GPURE: Unified Variational Energy}{equation.3.21}{}}
+\newlabel{eq:lcold}{{22}{5}{GPURE: Unified Variational Energy}{equation.3.22}{}}
+\newlabel{eq:ecc}{{23}{5}{GPURE: Unified Variational Energy}{equation.3.23}{}}
+\@writefile{loa}{\contentsline {algorithm}{\numberline {2}{\ignorespaces GPURE-Joint Training Step}}{5}{algorithm.2}\protected@file@percent }
+\newlabel{alg:joint}{{2}{5}{GPURE-Joint Training Step}{algorithm.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7}Joint Training Procedure}{5}{subsection.3.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Architecture Details}{5}{section.4}\protected@file@percent }
+\newlabel{sec:architecture}{{4}{5}{Architecture Details}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}MiniHDR-VAE}{5}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}ColdEfficientLatentUNet Architecture}{5}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}SeamingGenerator and Discriminator}{5}{subsection.4.3}\protected@file@percent }
+\citation{singlehdr}
+\citation{hdreye}
+\citation{expocm}
+\citation{pu21}
+\citation{hdrvdp}
+\citation{lpips}
+\citation{hanji2022}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Full TriGate-HDR architecture. Stage~1 (left, Path-G) applies Gaussian latent diffusion with TriGate conditioning encoders and RSO skip fusion over clipped regions. Stage~2 (center, Path-C) applies expansion-only cold diffusion anchored to the LDR in log-radiance space. Stage~3 (right, Path-S) composes the two outputs and applies the Seaming WGAN in the seam band. The GPURE objective and ECC coupling (bottom) jointly optimize all three paths.}}{6}{figure.caption.2}\protected@file@percent }
+\newlabel{fig:architecture}{{1}{6}{Full TriGate-HDR architecture. Stage~1 (left, Path-G) applies Gaussian latent diffusion with TriGate conditioning encoders and RSO skip fusion over clipped regions. Stage~2 (center, Path-C) applies expansion-only cold diffusion anchored to the LDR in log-radiance space. Stage~3 (right, Path-S) composes the two outputs and applies the Seaming WGAN in the seam band. The GPURE objective and ECC coupling (bottom) jointly optimize all three paths}{figure.caption.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Loss Functions}{6}{section.5}\protected@file@percent }
+\newlabel{sec:losses}{{5}{6}{Loss Functions}{section.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Stage 2 Loss Breakdown}{6}{subsection.5.1}\protected@file@percent }
+\newlabel{eq:stage2-loss}{{24}{6}{Stage 2 Loss Breakdown}{equation.5.24}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}$\mu $-Tonemap Alignment}{6}{subsection.5.2}\protected@file@percent }
+\newlabel{eq:mu-loss}{{25}{6}{$\mu $-Tonemap Alignment}{equation.5.25}{}}
+\newlabel{eq:mu-tonemap}{{26}{6}{$\mu $-Tonemap Alignment}{equation.5.26}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Sobel Gradient (HF) Loss}{6}{subsection.5.3}\protected@file@percent }
+\newlabel{eq:hf-loss}{{27}{6}{Sobel Gradient (HF) Loss}{equation.5.27}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Experiments}{6}{section.6}\protected@file@percent }
+\newlabel{sec:experiments}{{6}{6}{Experiments}{section.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Datasets and Evaluation Protocol}{6}{subsection.6.1}\protected@file@percent }
+\citation{hdrcnn}
+\citation{singlehdr}
+\citation{expandnet}
+\citation{hdrunet}
+\citation{hdrtransformer}
+\citation{ddim}
+\citation{ddpm}
+\citation{retidiff}
+\citation{expocm}
+\citation{expocm}
+\citation{singlehdr}
+\citation{expocm}
+\citation{singlehdr}
+\citation{expocm}
+\citation{hdrcnn}
+\citation{singlehdr}
+\citation{expandnet}
+\citation{hdrunet}
+\citation{hdrtransformer}
+\citation{ddim}
+\citation{ddpm}
+\citation{retidiff}
+\citation{expocm}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Implementation Details}{7}{subsection.6.2}\protected@file@percent }
+\newlabel{sec:impl}{{6.2}{7}{Implementation Details}{subsection.6.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Main Quantitative Results}{7}{subsection.6.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.4}Training Dynamics}{7}{subsection.6.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.5}Ablation Study}{7}{subsection.6.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}Discussion}{7}{section.7}\protected@file@percent }
+\newlabel{sec:discussion}{{7}{7}{Discussion}{section.7}{}}
+\bibstyle{ieeetr}
+\bibdata{references}
+\bibcite{fhdr}{1}
+\bibcite{singlehdr}{2}
+\bibcite{lediff}{3}
+\bibcite{expocm}{4}
+\bibcite{debevec1997}{5}
+\bibcite{hdrcnn}{6}
+\bibcite{santos2020}{7}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Quantitative comparison with state-of-the-art single-image HDR methods on the HDR-Real benchmark~\cite  {singlehdr}. Baseline numbers follow the unified evaluation protocol of~\cite  {expocm}. \textbf  {Best} and \underline  {second-best} per metric are highlighted. Arrows denote whether higher ($\uparrow $) or lower ($\downarrow $) is better. SSIM-l is the structural similarity computed in the linear-radiance domain.}}{8}{table.caption.3}\protected@file@percent }
+\newlabel{tab:main-results}{{1}{8}{Quantitative comparison with state-of-the-art single-image HDR methods on the HDR-Real benchmark~\cite {singlehdr}. Baseline numbers follow the unified evaluation protocol of~\cite {expocm}. \textbf {Best} and \underline {second-best} per metric are highlighted. Arrows denote whether higher ($\uparrow $) or lower ($\downarrow $) is better. SSIM-l is the structural similarity computed in the linear-radiance domain}{table.caption.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Ablation isolating each GPURE component on HDR-Real (best-checkpoint validation PSNR-$\mu $). Endpoints are measured; single-component rows are under controlled re-run.}}{8}{table.caption.6}\protected@file@percent }
+\newlabel{tab:ablation}{{2}{8}{Ablation isolating each GPURE component on HDR-Real (best-checkpoint validation PSNR-$\mu $). Endpoints are measured; single-component rows are under controlled re-run}{table.caption.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}Limitations and Future Work}{8}{subsection.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Conclusion}{8}{section.8}\protected@file@percent }
+\newlabel{sec:conclusion}{{8}{8}{Conclusion}{section.8}{}}
+\bibcite{arthdr}{8}
+\bibcite{histohdr}{9}
+\bibcite{exposurediffusion}{10}
+\bibcite{colddiffusion}{11}
+\bibcite{retidiff}{12}
+\bibcite{instructpix2pix}{13}
+\bibcite{lora}{14}
+\bibcite{wgangp}{15}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Training dynamics of TriGate-HDR on HDR-Real across four representative metrics (train vs.\ validation, exponential-moving-average overlaid on raw). PSNR-$\mu $ and SSIM-$\mu $ increase while LPIPS and $\Delta E_{2000}$ decrease; the amber marker/line denotes the selected checkpoint (epoch $88$). Curves are computed directly from the training log.}}{9}{figure.caption.4}\protected@file@percent }
+\newlabel{fig:dynamics}{{2}{9}{Training dynamics of TriGate-HDR on HDR-Real across four representative metrics (train vs.\ validation, exponential-moving-average overlaid on raw). PSNR-$\mu $ and SSIM-$\mu $ increase while LPIPS and $\Delta E_{2000}$ decrease; the amber marker/line denotes the selected checkpoint (epoch $88$). Curves are computed directly from the training log}{figure.caption.4}{}}
+\newlabel{fig:convergence}{{3a}{9}{Validation PSNR-$\mu $}{figure.caption.5}{}}
+\newlabel{sub@fig:convergence}{{a}{9}{Validation PSNR-$\mu $}{figure.caption.5}{}}
+\newlabel{fig:scatter}{{3b}{9}{PSNR-$\mu $ vs.\ SSIM-$\mu $}{figure.caption.5}{}}
+\newlabel{sub@fig:scatter}{{b}{9}{PSNR-$\mu $ vs.\ SSIM-$\mu $}{figure.caption.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces (a) Validation PSNR-$\mu $ convergence with the selected checkpoint (epoch $88$) highlighted. (b) Joint evolution of PSNR-$\mu $ and SSIM-$\mu $ over epochs (color encodes epoch): the two metrics improve together.}}{9}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:val-analysis}{{3}{9}{(a) Validation PSNR-$\mu $ convergence with the selected checkpoint (epoch $88$) highlighted. (b) Joint evolution of PSNR-$\mu $ and SSIM-$\mu $ over epochs (color encodes epoch): the two metrics improve together}{figure.caption.5}{}}
+\bibcite{pix2pix}{16}
+\bibcite{sam}{17}
+\bibcite{hdreye}{18}
+\bibcite{pu21}{19}
+\bibcite{hdrvdp}{20}
+\bibcite{lpips}{21}
+\bibcite{hanji2022}{22}
+\bibcite{expandnet}{23}
+\bibcite{hdrunet}{24}
+\bibcite{hdrtransformer}{25}
+\bibcite{ddim}{26}
+\bibcite{ddpm}{27}
+\gdef \@abspage@last{10}
