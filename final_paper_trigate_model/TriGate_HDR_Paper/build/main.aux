@@ -47,38 +47,42 @@
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.1}Log-Radiance Cold Forward Process (LR-CFP)}{3}{subsubsection.3.3.1}\protected@file@percent }
 \newlabel{eq:lrcfp}{{8}{3}{Log-Radiance Cold Forward Process (LR-CFP)}{equation.3.8}{}}
 \newlabel{eq:vae-encode}{{9}{3}{Log-Radiance Cold Forward Process (LR-CFP)}{equation.3.9}{}}
+\newlabel{eq:monolift}{{10}{3}{Log-Radiance Cold Forward Process (LR-CFP)}{equation.3.10}{}}
 \citation{colddiffusion}
-\newlabel{eq:monolift}{{10}{4}{Log-Radiance Cold Forward Process (LR-CFP)}{equation.3.10}{}}
 \newlabel{eq:expansion-field}{{11}{4}{Log-Radiance Cold Forward Process (LR-CFP)}{equation.3.11}{}}
 \newlabel{eq:cold-fwd}{{12}{4}{Log-Radiance Cold Forward Process (LR-CFP)}{equation.3.12}{}}
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.2}Identifiability Theorem}{4}{subsubsection.3.3.2}\protected@file@percent }
 \newlabel{sec:theorem}{{3.3.2}{4}{Identifiability Theorem}{subsubsection.3.3.2}{}}
 \newlabel{thm:identifiability}{{1}{4}{LR-CFP Identifiability}{theorem.1}{}}
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.3}ColdEfficientLatentUNet}{4}{subsubsection.3.3.3}\protected@file@percent }
+\newlabel{eq:rgcf}{{13}{4}{ColdEfficientLatentUNet}{equation.3.13}{}}
 \@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces Reverse Cold Sampling (\texttt  {restore\_hdr})}}{4}{algorithm.1}\protected@file@percent }
 \providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
 \newlabel{alg:reverse}{{1}{4}{Reverse Cold Sampling (\texttt {restore\_hdr})}{algorithm.1}{}}
-\newlabel{eq:rgcf}{{13}{4}{ColdEfficientLatentUNet}{equation.3.13}{}}
 \newlabel{eq:scale-adaptive}{{14}{4}{ColdEfficientLatentUNet}{equation.3.14}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Radiometric Synapse Operators (RSO)}{4}{subsection.3.4}\protected@file@percent }
 \newlabel{eq:rso}{{15}{4}{Radiometric Synapse Operators (RSO)}{equation.3.15}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Stage 3 --- Path-S: Seaming WGAN}{4}{subsection.3.5}\protected@file@percent }
+\newlabel{eq:compose}{{16}{4}{Stage 3 --- Path-S: Seaming WGAN}{equation.3.16}{}}
 \citation{wgangp}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Stage 3 --- Path-S: Seaming WGAN}{5}{subsection.3.5}\protected@file@percent }
-\newlabel{eq:compose}{{16}{5}{Stage 3 --- Path-S: Seaming WGAN}{equation.3.16}{}}
 \newlabel{eq:seam-out}{{17}{5}{Stage 3 --- Path-S: Seaming WGAN}{equation.3.17}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.6}GPURE: Unified Variational Energy}{5}{subsection.3.6}\protected@file@percent }
 \newlabel{eq:gpure}{{20}{5}{GPURE: Unified Variational Energy}{equation.3.20}{}}
 \newlabel{eq:lrad}{{21}{5}{GPURE: Unified Variational Energy}{equation.3.21}{}}
 \newlabel{eq:lcold}{{22}{5}{GPURE: Unified Variational Energy}{equation.3.22}{}}
 \newlabel{eq:ecc}{{23}{5}{GPURE: Unified Variational Energy}{equation.3.23}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7}Joint Training Procedure}{5}{subsection.3.7}\protected@file@percent }
 \@writefile{loa}{\contentsline {algorithm}{\numberline {2}{\ignorespaces GPURE-Joint Training Step}}{5}{algorithm.2}\protected@file@percent }
 \newlabel{alg:joint}{{2}{5}{GPURE-Joint Training Step}{algorithm.2}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.7}Joint Training Procedure}{5}{subsection.3.7}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {4}Architecture Details}{5}{section.4}\protected@file@percent }
 \newlabel{sec:architecture}{{4}{5}{Architecture Details}{section.4}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.1}MiniHDR-VAE}{5}{subsection.4.1}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.2}ColdEfficientLatentUNet Architecture}{5}{subsection.4.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.3}SeamingGenerator and Discriminator}{5}{subsection.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Loss Functions}{5}{section.5}\protected@file@percent }
+\newlabel{sec:losses}{{5}{5}{Loss Functions}{section.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Stage 2 Loss Breakdown}{5}{subsection.5.1}\protected@file@percent }
+\newlabel{eq:stage2-loss}{{24}{5}{Stage 2 Loss Breakdown}{equation.5.24}{}}
 \citation{singlehdr}
 \citation{hdreye}
 \citation{expocm}
@@ -88,10 +92,6 @@
 \citation{hanji2022}
 \@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Full TriGate-HDR architecture. Stage~1 (left, Path-G) applies Gaussian latent diffusion with TriGate conditioning encoders and RSO skip fusion over clipped regions. Stage~2 (center, Path-C) applies expansion-only cold diffusion anchored to the LDR in log-radiance space. Stage~3 (right, Path-S) composes the two outputs and applies the Seaming WGAN in the seam band. The GPURE objective and ECC coupling (bottom) jointly optimize all three paths.}}{6}{figure.caption.2}\protected@file@percent }
 \newlabel{fig:architecture}{{1}{6}{Full TriGate-HDR architecture. Stage~1 (left, Path-G) applies Gaussian latent diffusion with TriGate conditioning encoders and RSO skip fusion over clipped regions. Stage~2 (center, Path-C) applies expansion-only cold diffusion anchored to the LDR in log-radiance space. Stage~3 (right, Path-S) composes the two outputs and applies the Seaming WGAN in the seam band. The GPURE objective and ECC coupling (bottom) jointly optimize all three paths}{figure.caption.2}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5}Loss Functions}{6}{section.5}\protected@file@percent }
-\newlabel{sec:losses}{{5}{6}{Loss Functions}{section.5}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Stage 2 Loss Breakdown}{6}{subsection.5.1}\protected@file@percent }
-\newlabel{eq:stage2-loss}{{24}{6}{Stage 2 Loss Breakdown}{equation.5.24}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {5.2}$\mu $-Tonemap Alignment}{6}{subsection.5.2}\protected@file@percent }
 \newlabel{eq:mu-loss}{{25}{6}{$\mu $-Tonemap Alignment}{equation.5.25}{}}
 \newlabel{eq:mu-tonemap}{{26}{6}{$\mu $-Tonemap Alignment}{equation.5.26}{}}
@@ -125,12 +125,6 @@
 \citation{expocm}
 \citation{hdreye}
 \citation{expocm}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Implementation Details}{7}{subsection.6.2}\protected@file@percent }
-\newlabel{sec:impl}{{6.2}{7}{Implementation Details}{subsection.6.2}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Main Quantitative Results}{7}{subsection.6.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.4}Training Dynamics}{7}{subsection.6.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.5}Results on the HDR-EYE Benchmark}{7}{subsection.6.5}\protected@file@percent }
-\newlabel{sec:hdreye}{{6.5}{7}{Results on the HDR-EYE Benchmark}{subsection.6.5}{}}
 \citation{hdreye}
 \citation{expocm}
 \citation{hdreye}
@@ -145,21 +139,21 @@
 \citation{hdrtransformer}
 \citation{retidiff}
 \citation{expocm}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Implementation Details}{7}{subsection.6.2}\protected@file@percent }
+\newlabel{sec:impl}{{6.2}{7}{Implementation Details}{subsection.6.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Main Quantitative Results}{7}{subsection.6.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.4}Training Dynamics}{7}{subsection.6.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.5}Results on the HDR-EYE Benchmark}{7}{subsection.6.5}\protected@file@percent }
+\newlabel{sec:hdreye}{{6.5}{7}{Results on the HDR-EYE Benchmark}{subsection.6.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.6}Ablation Study}{7}{subsection.6.6}\protected@file@percent }
 \@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Quantitative comparison with state-of-the-art single-image HDR methods on the HDR-Real benchmark~\cite  {singlehdr}. Baseline numbers follow the unified evaluation protocol of~\cite  {expocm}. \textbf  {Best} and \underline  {second-best} per metric are highlighted. Arrows denote whether higher ($\uparrow $) or lower ($\downarrow $) is better. SSIM-l is the structural similarity computed in the linear-radiance domain.}}{8}{table.caption.3}\protected@file@percent }
 \newlabel{tab:main-results}{{1}{8}{Quantitative comparison with state-of-the-art single-image HDR methods on the HDR-Real benchmark~\cite {singlehdr}. Baseline numbers follow the unified evaluation protocol of~\cite {expocm}. \textbf {Best} and \underline {second-best} per metric are highlighted. Arrows denote whether higher ($\uparrow $) or lower ($\downarrow $) is better. SSIM-l is the structural similarity computed in the linear-radiance domain}{table.caption.3}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.6}Ablation Study}{8}{subsection.6.6}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Quantitative comparison on the HDR-EYE benchmark~\cite  {hdreye}, reported with the same layout and metric suite as our HDR-Real results and following the unified evaluation protocol of~\cite  {expocm}. `-$\ell $', `-$\mu $', and `-PU' denote the linear, $\mu $-law tonemapped, and perceptually-uniform (PU21) domains; $\uparrow $/$\downarrow $ indicate that higher/lower is better. \textbf  {Best} and \underline  {second-best} per column are highlighted. TriGate-HDR is reported at its best checkpoint.}}{8}{table.caption.6}\protected@file@percent }
+\newlabel{tab:hdreye-results}{{2}{8}{Quantitative comparison on the HDR-EYE benchmark~\cite {hdreye}, reported with the same layout and metric suite as our HDR-Real results and following the unified evaluation protocol of~\cite {expocm}. `-$\ell $', `-$\mu $', and `-PU' denote the linear, $\mu $-law tonemapped, and perceptually-uniform (PU21) domains; $\uparrow $/$\downarrow $ indicate that higher/lower is better. \textbf {Best} and \underline {second-best} per column are highlighted. TriGate-HDR is reported at its best checkpoint}{table.caption.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Ablation isolating each GPURE component on HDR-Real (best-checkpoint validation PSNR-$\mu $). Endpoints are measured; single-component rows are under controlled re-run.}}{8}{table.caption.9}\protected@file@percent }
+\newlabel{tab:ablation}{{3}{8}{Ablation isolating each GPURE component on HDR-Real (best-checkpoint validation PSNR-$\mu $). Endpoints are measured; single-component rows are under controlled re-run}{table.caption.9}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {7}Discussion}{8}{section.7}\protected@file@percent }
 \newlabel{sec:discussion}{{7}{8}{Discussion}{section.7}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}Limitations and Future Work}{8}{subsection.7.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {8}Conclusion}{8}{section.8}\protected@file@percent }
-\newlabel{sec:conclusion}{{8}{8}{Conclusion}{section.8}{}}
-\bibstyle{ieeetr}
-\bibdata{references}
-\bibcite{fhdr}{1}
-\bibcite{singlehdr}{2}
-\bibcite{lediff}{3}
-\bibcite{expocm}{4}
-\bibcite{debevec1997}{5}
 \@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Training dynamics of TriGate-HDR on HDR-Real across four representative metrics (train vs.\ validation, exponential-moving-average overlaid on raw). PSNR-$\mu $ and SSIM-$\mu $ increase while LPIPS and $\Delta E_{2000}$ decrease; the amber marker/line denotes the selected checkpoint (epoch $88$). Curves are computed directly from the training log.}}{9}{figure.caption.4}\protected@file@percent }
 \newlabel{fig:dynamics}{{2}{9}{Training dynamics of TriGate-HDR on HDR-Real across four representative metrics (train vs.\ validation, exponential-moving-average overlaid on raw). PSNR-$\mu $ and SSIM-$\mu $ increase while LPIPS and $\Delta E_{2000}$ decrease; the amber marker/line denotes the selected checkpoint (epoch $88$). Curves are computed directly from the training log}{figure.caption.4}{}}
 \newlabel{fig:convergence}{{3a}{9}{Validation PSNR-$\mu $}{figure.caption.5}{}}
@@ -168,6 +162,24 @@
 \newlabel{sub@fig:scatter}{{b}{9}{PSNR-$\mu $ vs.\ SSIM-$\mu $}{figure.caption.5}{}}
 \@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces (a) Validation PSNR-$\mu $ convergence with the selected checkpoint (epoch $88$) highlighted. (b) Joint evolution of PSNR-$\mu $ and SSIM-$\mu $ over epochs (color encodes epoch): the two metrics improve together.}}{9}{figure.caption.5}\protected@file@percent }
 \newlabel{fig:val-analysis}{{3}{9}{(a) Validation PSNR-$\mu $ convergence with the selected checkpoint (epoch $88$) highlighted. (b) Joint evolution of PSNR-$\mu $ and SSIM-$\mu $ over epochs (color encodes epoch): the two metrics improve together}{figure.caption.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}Limitations and Future Work}{9}{subsection.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Conclusion}{9}{section.8}\protected@file@percent }
+\newlabel{sec:conclusion}{{8}{9}{Conclusion}{section.8}{}}
+\bibstyle{ieeetr}
+\bibdata{references}
+\bibcite{fhdr}{1}
+\bibcite{singlehdr}{2}
+\bibcite{lediff}{3}
+\bibcite{expocm}{4}
+\bibcite{debevec1997}{5}
+\newlabel{fig:eye-radar}{{4a}{10}{Normalised profile across all eleven sub-metrics}{figure.caption.7}{}}
+\newlabel{sub@fig:eye-radar}{{a}{10}{Normalised profile across all eleven sub-metrics}{figure.caption.7}{}}
+\newlabel{fig:eye-advantage}{{4b}{10}{Relative margin over the strongest baseline, per metric}{figure.caption.7}{}}
+\newlabel{sub@fig:eye-advantage}{{b}{10}{Relative margin over the strongest baseline, per metric}{figure.caption.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Two views of the HDR-EYE comparison in Table~\ref {tab:hdreye-results}. (a) A radar profile of the four strongest methods, each axis min--max normalised (LPIPS and $\Delta E_{2000}$ inverted so that outward is better); the shaded amber polygon is TriGate-HDR. (b) The per-metric relative margin of TriGate-HDR over the best \emph  {competing} method: green bars are wins, red bars mark the three metrics on which a prior method still leads.}}{10}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:eye-comparative}{{4}{10}{Two views of the HDR-EYE comparison in Table~\ref {tab:hdreye-results}. (a) A radar profile of the four strongest methods, each axis min--max normalised (LPIPS and $\Delta E_{2000}$ inverted so that outward is better); the shaded amber polygon is TriGate-HDR. (b) The per-metric relative margin of TriGate-HDR over the best \emph {competing} method: green bars are wins, red bars mark the three metrics on which a prior method still leads}{figure.caption.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces HDR-EYE training dynamics (train vs.\ validation, exponential-moving-average overlaid on raw). Validation PSNR-$\mu $, HDR-VDP-2 and MS-SSIM rise and saturate while LPIPS decreases; the amber marker denotes the selected checkpoint. Curves are computed directly from the benchmark log.}}{10}{figure.caption.8}\protected@file@percent }
+\newlabel{fig:eye-dynamics}{{5}{10}{HDR-EYE training dynamics (train vs.\ validation, exponential-moving-average overlaid on raw). Validation PSNR-$\mu $, HDR-VDP-2 and MS-SSIM rise and saturate while LPIPS decreases; the amber marker denotes the selected checkpoint. Curves are computed directly from the benchmark log}{figure.caption.8}{}}
 \bibcite{hdrcnn}{6}
 \bibcite{santos2020}{7}
 \bibcite{arthdr}{8}
@@ -184,22 +196,10 @@
 \bibcite{pu21}{19}
 \bibcite{hdrvdp}{20}
 \bibcite{lpips}{21}
-\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Quantitative comparison on the HDR-EYE benchmark~\cite  {hdreye}, reported with the same layout and metric suite as our HDR-Real results and following the unified evaluation protocol of~\cite  {expocm}. `-$\ell $', `-$\mu $', and `-PU' denote the linear, $\mu $-law tonemapped, and perceptually-uniform (PU21) domains; $\uparrow $/$\downarrow $ indicate that higher/lower is better. \textbf  {Best} and \underline  {second-best} per column are highlighted. TriGate-HDR is reported at its best checkpoint.}}{10}{table.caption.6}\protected@file@percent }
-\newlabel{tab:hdreye-results}{{2}{10}{Quantitative comparison on the HDR-EYE benchmark~\cite {hdreye}, reported with the same layout and metric suite as our HDR-Real results and following the unified evaluation protocol of~\cite {expocm}. `-$\ell $', `-$\mu $', and `-PU' denote the linear, $\mu $-law tonemapped, and perceptually-uniform (PU21) domains; $\uparrow $/$\downarrow $ indicate that higher/lower is better. \textbf {Best} and \underline {second-best} per column are highlighted. TriGate-HDR is reported at its best checkpoint}{table.caption.6}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Ablation isolating each GPURE component on HDR-Real (best-checkpoint validation PSNR-$\mu $). Endpoints are measured; single-component rows are under controlled re-run.}}{10}{table.caption.9}\protected@file@percent }
-\newlabel{tab:ablation}{{3}{10}{Ablation isolating each GPURE component on HDR-Real (best-checkpoint validation PSNR-$\mu $). Endpoints are measured; single-component rows are under controlled re-run}{table.caption.9}{}}
 \bibcite{hanji2022}{22}
 \bibcite{expandnet}{23}
 \bibcite{hdrunet}{24}
 \bibcite{hdrtransformer}{25}
 \bibcite{ddim}{26}
 \bibcite{ddpm}{27}
-\newlabel{fig:eye-radar}{{4a}{11}{Normalised profile across all eleven sub-metrics}{figure.caption.7}{}}
-\newlabel{sub@fig:eye-radar}{{a}{11}{Normalised profile across all eleven sub-metrics}{figure.caption.7}{}}
-\newlabel{fig:eye-advantage}{{4b}{11}{Relative margin over the strongest baseline, per metric}{figure.caption.7}{}}
-\newlabel{sub@fig:eye-advantage}{{b}{11}{Relative margin over the strongest baseline, per metric}{figure.caption.7}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Two views of the HDR-EYE comparison in Table~\ref {tab:hdreye-results}. (a) A radar profile of the four strongest methods, each axis min--max normalised (LPIPS and $\Delta E_{2000}$ inverted so that outward is better); the shaded amber polygon is TriGate-HDR. (b) The per-metric relative margin of TriGate-HDR over the best \emph  {competing} method: green bars are wins, red bars mark the three metrics on which a prior method still leads.}}{11}{figure.caption.7}\protected@file@percent }
-\newlabel{fig:eye-comparative}{{4}{11}{Two views of the HDR-EYE comparison in Table~\ref {tab:hdreye-results}. (a) A radar profile of the four strongest methods, each axis min--max normalised (LPIPS and $\Delta E_{2000}$ inverted so that outward is better); the shaded amber polygon is TriGate-HDR. (b) The per-metric relative margin of TriGate-HDR over the best \emph {competing} method: green bars are wins, red bars mark the three metrics on which a prior method still leads}{figure.caption.7}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces HDR-EYE training dynamics (train vs.\ validation, exponential-moving-average overlaid on raw). Validation PSNR-$\mu $, HDR-VDP-2 and MS-SSIM rise and saturate while LPIPS decreases; the amber marker denotes the selected checkpoint. Curves are computed directly from the benchmark log.}}{11}{figure.caption.8}\protected@file@percent }
-\newlabel{fig:eye-dynamics}{{5}{11}{HDR-EYE training dynamics (train vs.\ validation, exponential-moving-average overlaid on raw). Validation PSNR-$\mu $, HDR-VDP-2 and MS-SSIM rise and saturate while LPIPS decreases; the amber marker denotes the selected checkpoint. Curves are computed directly from the benchmark log}{figure.caption.8}{}}
 \gdef \@abspage@last{11}

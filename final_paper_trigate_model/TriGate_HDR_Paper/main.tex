@@ -106,15 +106,9 @@ We identify the core failure mode as a \emph{regime conflation} problem: applyin
 
 \subsection{Contributions}
 
-The key contributions of this work are as follows.
+At the core of this work is the \textbf{Gate-Partitioned Unified Radiance Energy (GPURE)} framework which, to our knowledge, is the first HDR reconstruction formulation to unify a cold-diffusion radiometric path and a masked generative-diffusion path under a single differentiable variational objective. Within this framework we derive the \textbf{Log-Radiance Cold Forward Process (LR-CFP)} and accompany it with a formal identifiability theorem, showing that the expansion latent field on trusted pixels is uniquely determined from paired HDR--LDR data under mild monotonicity assumptions and thereby placing the cold path on a stronger theoretical footing than generic cold diffusion.
 
-\begin{itemize}
-\item We introduce the \textbf{Gate-Partitioned Unified Radiance Energy (GPURE)} framework, which, to our knowledge, is the first HDR reconstruction formulation to unify a cold diffusion radiometric path and a masked generative diffusion path under a single differentiable variational objective.
-\item We derive the \textbf{Log-Radiance Cold Forward Process (LR-CFP)} and provide a formal identifiability theorem showing that the expansion latent field on trusted pixels is uniquely determined from paired HDR--LDR data under mild monotonicity assumptions, establishing a stronger theoretical foundation than generic cold diffusion.
-\item We propose \textbf{Radiometric Synapse Operators (RSO)} as camera-response-informed skip-level fusion modules that replace generic convolutional gates with physically meaningful log-ratio operators, making the skip fusion interpretable in terms of the CRF.
-\item We introduce \textbf{Exposure-Bracket Consistency (ECC)} as a seam-band coupling loss that enforces photometric consistency between Path-G and Path-C along clipping boundaries, mitigating seam artifacts without a separate alignment stage.
-\item We present a three-phase joint training procedure (warmup, joint, seam) that efficiently bootstraps from independently pretrained cold and generative models.
-\end{itemize}
+Complementing these foundations are two physically grounded modules. \textbf{Radiometric Synapse Operators (RSO)} act as camera-response-informed skip-level fusion units that replace generic convolutional gates with log-ratio operators, rendering the skip fusion interpretable in terms of the camera response function; \textbf{Exposure-Bracket Consistency (ECC)} is a seam-band coupling loss that enforces photometric consistency between the generative and cold paths along clipping boundaries, suppressing seam artifacts without a separate alignment stage. Taken together, and coupled with a three-phase joint training procedure (warmup, joint, and seam) that efficiently bootstraps from independently pretrained cold and generative models, these components define the partition-aware reconstruction approach developed in the remainder of the paper.
 
 % ============================================================
 \section{Related Work}
