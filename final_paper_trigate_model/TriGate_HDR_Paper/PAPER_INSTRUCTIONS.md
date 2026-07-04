@@ -189,5 +189,23 @@ before finalizing, and write to that spec.
       cases) once export images are ready.
 - [ ] Tighten to 8 content pages (CVPR limit, references excluded) before submission.
 - [ ] Minor: a few wide equations produce overfull hboxes; break them for camera-ready.
+- [x] **HDR-EYE benchmark (Table 2)** rebuilt to mirror ExpoCM Table 1 exactly: rotated
+      `Dataset` label (multirow+rotatebox), full metric suite PSNR-µ / SSIM-µ / PSNR-PU /
+      SSIM-PU / PSNR-ℓ / SSIM-ℓ / MS-SSIM / **combined HDR-VDP-2/-3** / LPIPS / ΔE2000, with
+      bold(best)+underline(2nd). Reported checkpoint = epoch 77 val (per explicit instruction;
+      epoch number NOT shown in table). Ours values: 27.87 / 0.7221 / 22.93 / 0.8093 / 18.85 /
+      0.7551 / 0.9177 / 52.00 / 8.02 / 0.1433 / 10.57. Best on 7/11 sub-metrics, 2nd on ΔE2000;
+      trails on SSIM-µ, PSNR-ℓ, HDR-VDP-2. HDR-EYE PSNR-ℓ (18.85) and ΔE2000 (10.57) are on the
+      correct ExpoCM scale (unlike the HDR-Real CSV, where psnr_l=67 and dE2000=0.36 are broken).
+- [x] Two novel comparative figures from the table via `scripts/make_hdreye_figures.py`:
+      Fig.4a 11-axis **radar** (ours vs ExpoCM/DDPM/DDIM), Fig.4b **per-metric advantage bar**
+      (relative margin over strongest baseline; green=win, red=loss), plus Fig.5 HDR-EYE
+      **training dynamics** (marker at epoch 77).
+- [ ] HDR-Real table (Table 1) still uses split HDR-VDP columns and omits PSNR-ℓ/ΔE2000 because
+      the HDR-Real CSV values for those two are on a broken scale. To make Table 1 match the
+      ExpoCM Table-1 layout, recompute PSNR-ℓ and ΔE2000 for the epoch-88 HDR-Real checkpoint.
+- [!] NOTE: `main.tex` + this file were reverted to the committed state between sessions
+      (uncommitted HDR-EYE edits were lost, then re-applied). Commit after each session to avoid
+      re-doing work.
 
 Keep this section updated as work proceeds.

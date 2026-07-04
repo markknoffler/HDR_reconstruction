@@ -1,0 +1,34 @@
+--2026-07-01 19:34:07--  https://drive.google.com/uc?export=download&id=1muy49Pd0c7ZkxyxoxV7vIRvPv6kJdPR2
+Resolving drive.google.com (drive.google.com)... 142.250.183.238, 2404:6800:4002:81d::200e
+Connecting to drive.google.com (drive.google.com)|142.250.183.238|:443... connected.
+HTTP request sent, awaiting response... 303 See Other
+Location: https://drive.usercontent.google.com/download?id=1muy49Pd0c7ZkxyxoxV7vIRvPv6kJdPR2&export=download [following]
+--2026-07-01 19:34:07--  https://drive.usercontent.google.com/download?id=1muy49Pd0c7ZkxyxoxV7vIRvPv6kJdPR2&export=download
+Resolving drive.usercontent.google.com (drive.usercontent.google.com)... 192.178.177.132, 2404:6800:4013:807::84
+Connecting to drive.usercontent.google.com (drive.usercontent.google.com)|192.178.177.132|:443... connected.
+HTTP request sent, awaiting response... 404 Not Found
+2026-07-01 19:34:08 ERROR 404: Not Found.
+
+
+=== HDR-Synth (hdr_synth) ===
++ wget --no-check-certificate -c -O /home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/datasets/_downloads/SingleHDR-Training.zip https://drive.google.com/uc?export=download&id=1muy49Pd0c7ZkxyxoxV7vIRvPv6kJdPR2
+  HDR-Synth training zip download failed: Command '['wget', '--no-check-certificate', '-c', '-O', '/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/datasets/_downloads/SingleHDR-Training.zip', 'https://drive.google.com/uc?export=download&id=1muy49Pd0c7ZkxyxoxV7vIRvPv6kJdPR2']' returned non-zero exit status 8.
+  Manual: https://drive.google.com/file/d/1muy49Pd0c7ZkxyxoxV7vIRvPv6kJdPR2/view
+Extracting /home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/datasets/_downloads/SingleHDR-Training.zip -> /home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/datasets/_staging/hdr_synth_train
+Traceback (most recent call last):
+  File "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/scripts/download_expo_datasets.py", line 610, in <module>
+    main()
+  File "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/scripts/download_expo_datasets.py", line 598, in main
+    prepare_dataset(
+  File "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/scripts/download_expo_datasets.py", line 497, in prepare_dataset
+    _prepare_hdr_synth(spec, skip_download=skip_download)
+  File "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/scripts/download_expo_datasets.py", line 440, in _prepare_hdr_synth
+    _extract_zip(zip_path, staging)
+  File "/home/user/Desktop/Deep_learning_projects/Hrishav_sir_project/Hrishav_Sir_FHDR/TriGate-HDR/scripts/download_expo_datasets.py", line 115, in _extract_zip
+    with zipfile.ZipFile(zip_path, "r") as zf:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/user/anaconda3/lib/python3.11/zipfile.py", line 1302, in __init__
+    self._RealGetContents()
+  File "/home/user/anaconda3/lib/python3.11/zipfile.py", line 1369, in _RealGetContents
+    raise BadZipFile("File is not a zip file")
+zipfile.BadZipFile: File is not a zip file

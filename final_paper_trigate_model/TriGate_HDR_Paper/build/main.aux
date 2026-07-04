@@ -123,13 +123,36 @@
 \citation{ddpm}
 \citation{retidiff}
 \citation{expocm}
+\citation{hdreye}
+\citation{expocm}
 \@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Implementation Details}{7}{subsection.6.2}\protected@file@percent }
 \newlabel{sec:impl}{{6.2}{7}{Implementation Details}{subsection.6.2}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Main Quantitative Results}{7}{subsection.6.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {6.4}Training Dynamics}{7}{subsection.6.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.5}Ablation Study}{7}{subsection.6.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {7}Discussion}{7}{section.7}\protected@file@percent }
-\newlabel{sec:discussion}{{7}{7}{Discussion}{section.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.5}Results on the HDR-EYE Benchmark}{7}{subsection.6.5}\protected@file@percent }
+\newlabel{sec:hdreye}{{6.5}{7}{Results on the HDR-EYE Benchmark}{subsection.6.5}{}}
+\citation{hdreye}
+\citation{expocm}
+\citation{hdreye}
+\citation{expocm}
+\citation{hdreye}
+\citation{hdrcnn}
+\citation{singlehdr}
+\citation{expandnet}
+\citation{hdrunet}
+\citation{ddpm}
+\citation{ddim}
+\citation{hdrtransformer}
+\citation{retidiff}
+\citation{expocm}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Quantitative comparison with state-of-the-art single-image HDR methods on the HDR-Real benchmark~\cite  {singlehdr}. Baseline numbers follow the unified evaluation protocol of~\cite  {expocm}. \textbf  {Best} and \underline  {second-best} per metric are highlighted. Arrows denote whether higher ($\uparrow $) or lower ($\downarrow $) is better. SSIM-l is the structural similarity computed in the linear-radiance domain.}}{8}{table.caption.3}\protected@file@percent }
+\newlabel{tab:main-results}{{1}{8}{Quantitative comparison with state-of-the-art single-image HDR methods on the HDR-Real benchmark~\cite {singlehdr}. Baseline numbers follow the unified evaluation protocol of~\cite {expocm}. \textbf {Best} and \underline {second-best} per metric are highlighted. Arrows denote whether higher ($\uparrow $) or lower ($\downarrow $) is better. SSIM-l is the structural similarity computed in the linear-radiance domain}{table.caption.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.6}Ablation Study}{8}{subsection.6.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}Discussion}{8}{section.7}\protected@file@percent }
+\newlabel{sec:discussion}{{7}{8}{Discussion}{section.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}Limitations and Future Work}{8}{subsection.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Conclusion}{8}{section.8}\protected@file@percent }
+\newlabel{sec:conclusion}{{8}{8}{Conclusion}{section.8}{}}
 \bibstyle{ieeetr}
 \bibdata{references}
 \bibcite{fhdr}{1}
@@ -137,23 +160,6 @@
 \bibcite{lediff}{3}
 \bibcite{expocm}{4}
 \bibcite{debevec1997}{5}
-\bibcite{hdrcnn}{6}
-\bibcite{santos2020}{7}
-\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Quantitative comparison with state-of-the-art single-image HDR methods on the HDR-Real benchmark~\cite  {singlehdr}. Baseline numbers follow the unified evaluation protocol of~\cite  {expocm}. \textbf  {Best} and \underline  {second-best} per metric are highlighted. Arrows denote whether higher ($\uparrow $) or lower ($\downarrow $) is better. SSIM-l is the structural similarity computed in the linear-radiance domain.}}{8}{table.caption.3}\protected@file@percent }
-\newlabel{tab:main-results}{{1}{8}{Quantitative comparison with state-of-the-art single-image HDR methods on the HDR-Real benchmark~\cite {singlehdr}. Baseline numbers follow the unified evaluation protocol of~\cite {expocm}. \textbf {Best} and \underline {second-best} per metric are highlighted. Arrows denote whether higher ($\uparrow $) or lower ($\downarrow $) is better. SSIM-l is the structural similarity computed in the linear-radiance domain}{table.caption.3}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Ablation isolating each GPURE component on HDR-Real (best-checkpoint validation PSNR-$\mu $). Endpoints are measured; single-component rows are under controlled re-run.}}{8}{table.caption.6}\protected@file@percent }
-\newlabel{tab:ablation}{{2}{8}{Ablation isolating each GPURE component on HDR-Real (best-checkpoint validation PSNR-$\mu $). Endpoints are measured; single-component rows are under controlled re-run}{table.caption.6}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}Limitations and Future Work}{8}{subsection.7.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {8}Conclusion}{8}{section.8}\protected@file@percent }
-\newlabel{sec:conclusion}{{8}{8}{Conclusion}{section.8}{}}
-\bibcite{arthdr}{8}
-\bibcite{histohdr}{9}
-\bibcite{exposurediffusion}{10}
-\bibcite{colddiffusion}{11}
-\bibcite{retidiff}{12}
-\bibcite{instructpix2pix}{13}
-\bibcite{lora}{14}
-\bibcite{wgangp}{15}
 \@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Training dynamics of TriGate-HDR on HDR-Real across four representative metrics (train vs.\ validation, exponential-moving-average overlaid on raw). PSNR-$\mu $ and SSIM-$\mu $ increase while LPIPS and $\Delta E_{2000}$ decrease; the amber marker/line denotes the selected checkpoint (epoch $88$). Curves are computed directly from the training log.}}{9}{figure.caption.4}\protected@file@percent }
 \newlabel{fig:dynamics}{{2}{9}{Training dynamics of TriGate-HDR on HDR-Real across four representative metrics (train vs.\ validation, exponential-moving-average overlaid on raw). PSNR-$\mu $ and SSIM-$\mu $ increase while LPIPS and $\Delta E_{2000}$ decrease; the amber marker/line denotes the selected checkpoint (epoch $88$). Curves are computed directly from the training log}{figure.caption.4}{}}
 \newlabel{fig:convergence}{{3a}{9}{Validation PSNR-$\mu $}{figure.caption.5}{}}
@@ -162,16 +168,38 @@
 \newlabel{sub@fig:scatter}{{b}{9}{PSNR-$\mu $ vs.\ SSIM-$\mu $}{figure.caption.5}{}}
 \@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces (a) Validation PSNR-$\mu $ convergence with the selected checkpoint (epoch $88$) highlighted. (b) Joint evolution of PSNR-$\mu $ and SSIM-$\mu $ over epochs (color encodes epoch): the two metrics improve together.}}{9}{figure.caption.5}\protected@file@percent }
 \newlabel{fig:val-analysis}{{3}{9}{(a) Validation PSNR-$\mu $ convergence with the selected checkpoint (epoch $88$) highlighted. (b) Joint evolution of PSNR-$\mu $ and SSIM-$\mu $ over epochs (color encodes epoch): the two metrics improve together}{figure.caption.5}{}}
+\bibcite{hdrcnn}{6}
+\bibcite{santos2020}{7}
+\bibcite{arthdr}{8}
+\bibcite{histohdr}{9}
+\bibcite{exposurediffusion}{10}
+\bibcite{colddiffusion}{11}
+\bibcite{retidiff}{12}
+\bibcite{instructpix2pix}{13}
+\bibcite{lora}{14}
+\bibcite{wgangp}{15}
 \bibcite{pix2pix}{16}
 \bibcite{sam}{17}
 \bibcite{hdreye}{18}
 \bibcite{pu21}{19}
 \bibcite{hdrvdp}{20}
 \bibcite{lpips}{21}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Quantitative comparison on the HDR-EYE benchmark~\cite  {hdreye}, reported with the same layout and metric suite as our HDR-Real results and following the unified evaluation protocol of~\cite  {expocm}. `-$\ell $', `-$\mu $', and `-PU' denote the linear, $\mu $-law tonemapped, and perceptually-uniform (PU21) domains; $\uparrow $/$\downarrow $ indicate that higher/lower is better. \textbf  {Best} and \underline  {second-best} per column are highlighted. TriGate-HDR is reported at its best checkpoint.}}{10}{table.caption.6}\protected@file@percent }
+\newlabel{tab:hdreye-results}{{2}{10}{Quantitative comparison on the HDR-EYE benchmark~\cite {hdreye}, reported with the same layout and metric suite as our HDR-Real results and following the unified evaluation protocol of~\cite {expocm}. `-$\ell $', `-$\mu $', and `-PU' denote the linear, $\mu $-law tonemapped, and perceptually-uniform (PU21) domains; $\uparrow $/$\downarrow $ indicate that higher/lower is better. \textbf {Best} and \underline {second-best} per column are highlighted. TriGate-HDR is reported at its best checkpoint}{table.caption.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Ablation isolating each GPURE component on HDR-Real (best-checkpoint validation PSNR-$\mu $). Endpoints are measured; single-component rows are under controlled re-run.}}{10}{table.caption.9}\protected@file@percent }
+\newlabel{tab:ablation}{{3}{10}{Ablation isolating each GPURE component on HDR-Real (best-checkpoint validation PSNR-$\mu $). Endpoints are measured; single-component rows are under controlled re-run}{table.caption.9}{}}
 \bibcite{hanji2022}{22}
 \bibcite{expandnet}{23}
 \bibcite{hdrunet}{24}
 \bibcite{hdrtransformer}{25}
 \bibcite{ddim}{26}
 \bibcite{ddpm}{27}
-\gdef \@abspage@last{10}
+\newlabel{fig:eye-radar}{{4a}{11}{Normalised profile across all eleven sub-metrics}{figure.caption.7}{}}
+\newlabel{sub@fig:eye-radar}{{a}{11}{Normalised profile across all eleven sub-metrics}{figure.caption.7}{}}
+\newlabel{fig:eye-advantage}{{4b}{11}{Relative margin over the strongest baseline, per metric}{figure.caption.7}{}}
+\newlabel{sub@fig:eye-advantage}{{b}{11}{Relative margin over the strongest baseline, per metric}{figure.caption.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Two views of the HDR-EYE comparison in Table~\ref {tab:hdreye-results}. (a) A radar profile of the four strongest methods, each axis min--max normalised (LPIPS and $\Delta E_{2000}$ inverted so that outward is better); the shaded amber polygon is TriGate-HDR. (b) The per-metric relative margin of TriGate-HDR over the best \emph  {competing} method: green bars are wins, red bars mark the three metrics on which a prior method still leads.}}{11}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:eye-comparative}{{4}{11}{Two views of the HDR-EYE comparison in Table~\ref {tab:hdreye-results}. (a) A radar profile of the four strongest methods, each axis min--max normalised (LPIPS and $\Delta E_{2000}$ inverted so that outward is better); the shaded amber polygon is TriGate-HDR. (b) The per-metric relative margin of TriGate-HDR over the best \emph {competing} method: green bars are wins, red bars mark the three metrics on which a prior method still leads}{figure.caption.7}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces HDR-EYE training dynamics (train vs.\ validation, exponential-moving-average overlaid on raw). Validation PSNR-$\mu $, HDR-VDP-2 and MS-SSIM rise and saturate while LPIPS decreases; the amber marker denotes the selected checkpoint. Curves are computed directly from the benchmark log.}}{11}{figure.caption.8}\protected@file@percent }
+\newlabel{fig:eye-dynamics}{{5}{11}{HDR-EYE training dynamics (train vs.\ validation, exponential-moving-average overlaid on raw). Validation PSNR-$\mu $, HDR-VDP-2 and MS-SSIM rise and saturate while LPIPS decreases; the amber marker denotes the selected checkpoint. Curves are computed directly from the benchmark log}{figure.caption.8}{}}
+\gdef \@abspage@last{11}
